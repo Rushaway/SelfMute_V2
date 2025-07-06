@@ -38,6 +38,9 @@ bool g_bClientVoice[MAXPLAYERS + 1][MAXPLAYERS + 1];
 bool g_bClientGroupText[MAXPLAYERS + 1][view_as<int>(GROUP_MAX_NUM)];
 bool g_bClientGroupVoice[MAXPLAYERS + 1][view_as<int>(GROUP_MAX_NUM)];
 
+/* ProtoBuf bool */
+bool g_bIsProtoBuf = false;
+
 /* ConVar List */
 ConVar g_cvMuteAdmins;
 ConVar g_cvMuteAdminsPerma;
@@ -140,7 +143,7 @@ public Plugin myinfo = {
 	name 			= "SelfMute V2",
 	author 			= "Dolly",
 	description 	= "Ignore other players in text and voicechat.",
-	version 		= "1.0.0",
+	version 		= "1.0.3",
 	url 			= ""
 };
 
@@ -199,6 +202,21 @@ public void OnPluginStart() {
 	/* Prefix */
 	CSetPrefix(PLUGIN_PREFIX);
 	
+	/* Radio Commands */
+	if(GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf) {
+		g_bIsProtoBuf = true;
+	}
+	
+	UserMsg msgRadioText = GetUserMessageId("RadioText");
+	UserMsg msgSendAudio = GetUserMessageId("SendAudio");
+
+	if (msgRadioText == INVALID_MESSAGE_ID || msgSendAudio == INVALID_MESSAGE_ID) {
+		SetFailState("This game doesnt support RadioText or SendAudio");
+	}
+
+	HookUserMessage(msgRadioText, Hook_UserMessageRadioText, true);
+	HookUserMessage(msgSendAudio, Hook_UserMessageSendAudio, true);
+
 	/* Incase of a late load */
 	if(g_bLate) {
 		for (int i = 1; i <= MaxClients; i++) {
@@ -499,7 +517,7 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 					
 					char itemText[128];
 					MuteType checkMuteType = GetMuteType(g_bClientGroupText[client][i], g_bClientGroupVoice[client][i]);
-					// does \n work here? if not please edit it xd
+
 					FormatEx(itemText, sizeof(itemText), "%s\nPermanent: %s\nVoice Chat: %s\nText Chat: %s",
 														g_sGroupsNames[i],
 														perma ? "Yes" : "No",
@@ -718,13 +736,38 @@ int Menu_ShowSelfMuteSpecificTargets(Menu menu, MenuAction action, int param1, i
 					return 1;
 				}
 				
+				MuteType muteType = GetMuteType(g_bClientText[param1][target], g_bClientVoice[param1][target]);
+				if(muteType == MuteType_All) {
+					return 1;
+				}
+				
+				if(muteType == g_PlayerData[param1].muteType) {
+					CPrintToChat(param1, "You have already self-muted this player. If you want to self-mute another type of chat please change your settings in {olive}!smcookies");
+					ShowSelfMuteSpecificTargets(param1, muteTarget);
+					return 1;
+				}
+				
 				HandleClientSelfMute(param1, target, g_PlayerData[param1].muteType, g_PlayerData[param1].muteDuration);
 			} else {
+				GroupFilter groupFilter = GetGroupFilterByChar(options[1]);
+				
+				MuteType muteType = GetMuteType(g_bClientGroupText[param1][view_as<int>(groupFilter)], g_bClientGroupVoice[param1][view_as<int>(groupFilter)]);
+				if(muteType == MuteType_All) {
+					return 1;
+				}
+				
+				if(muteType == g_PlayerData[param1].muteType) {
+					CPrintToChat(param1, "You have already self-muted this group. If you want to self-mute another type of chat please change your settings in {olive}!smcookies");
+					ShowSelfMuteSpecificTargets(param1, muteTarget);
+					return 1;
+				}
+				
 				HandleGroupSelfMute(param1, options[1], g_PlayerData[param1].muteType, g_PlayerData[param1].muteDuration);
 			}
 			
-			
-			ShowSelfMuteSpecificTargets(param1, muteTarget);
+			if(g_PlayerData[param1].muteType != MuteType_AskFirst && g_PlayerData[param1].muteDuration != MuteDuration_AskFirst) {
+				ShowSelfMuteSpecificTargets(param1, muteTarget);
+			}
 		}
 	}
 	
@@ -1205,7 +1248,7 @@ void DB_Tables() {
 																								
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_mute_dev`("
+		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_mute`("
 												... "`id` int(11) unsigned NOT NULL auto_increment," 
 												... "`client_name` varchar(32) NOT NULL," 
 												... "`client_steamid` varchar(20) NOT NULL," 
@@ -1218,7 +1261,7 @@ void DB_Tables() {
 																								
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `groups_mute_dev`("
+		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `groups_mute`("
 												... "`id` int(11) unsigned NOT NULL auto_increment," 
 												... "`client_name` varchar(32) NOT NULL," 
 												... "`client_steamid` varchar(20) NOT NULL," 
@@ -1231,12 +1274,21 @@ void DB_Tables() {
 														
 		T_mysqlTables.AddQuery(query0);
 	
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_client_steamid` ON `clients_data` (`client_steamid`);"
+											..."CREATE INDEX `idx_clients_client_steamid` ON `clients_mute` (`client_steamid`);"
+											..."CREATE INDEX `idx_clients_target_steamid` ON `clients_mute` (`target_steamid`);"
+											..."CREATE INDEX `idx_groups_client_steamid` ON `groups_mute` (`client_steamid`);"
+											..."CREATE INDEX `idx_both1` ON `clients_mute` (`client_steamid`, `target_steamid`);"
+											..."CREATE INDEX `idx_both2` ON `groups_mute` (`client_steamid`, `group_filter`);");
+											
+		T_mysqlTables.AddQuery(query0);
+		
 		g_hDB.Execute(T_mysqlTables, DB_mysqlTablesOnSuccess, DB_mysqlTablesOnError, _, DBPrio_High);
 	} else if(strcmp(driver, "sqlite", false) == 0) {
 		Transaction T_sqliteTables = SQL_CreateTransaction();
 		
 		char query0[1024];		
-		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_mute_dev`("
+		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_mute`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_steamid` varchar(20) NOT NULL," 
 												... "`mute_type` int(2) NOT NULL,"
@@ -1246,7 +1298,7 @@ void DB_Tables() {
 		T_sqliteTables.AddQuery(query0);
 		
 		char query1[1024];		
-		g_hDB.Format(query1, sizeof(query1), "CREATE TABLE IF NOT EXISTS `clients_mute_dev`("
+		g_hDB.Format(query1, sizeof(query1), "CREATE TABLE IF NOT EXISTS `clients_mute`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_name` varchar(32) NOT NULL," 
 												... "`client_steamid` varchar(20) NOT NULL," 
@@ -1259,7 +1311,7 @@ void DB_Tables() {
 		T_sqliteTables.AddQuery(query1);
 	
 		char query2[1024];	
-		g_hDB.Format(query2, sizeof(query2), "CREATE TABLE IF NOT EXISTS `groups_mute_dev`("
+		g_hDB.Format(query2, sizeof(query2), "CREATE TABLE IF NOT EXISTS `groups_mute`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_name` varchar(32) NOT NULL," 
 												... "`client_steamid` varchar(20) NOT NULL," 
@@ -1392,13 +1444,13 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 	
 	/* Now get mute list duh, get both the client as a client and as a target */
 	char query[200];
-	FormatEx(query, sizeof(query), "SELECT `target_name`, `target_steamid`, `text_chat`, `voice_chat` FROM `clients_mute_dev` WHERE `client_steamid`='%s'", steamID);
+	FormatEx(query, sizeof(query), "SELECT `target_name`, `target_steamid`, `text_chat`, `voice_chat` FROM `clients_mute` WHERE `client_steamid`='%s'", steamID);
 	g_hDB.Query(DB_OnGetClientClientMutes, query, userid);
 	
-	FormatEx(query, sizeof(query), "SELECT `group_name`, `group_filter`, `text_chat`, `voice_chat` FROM `groups_mute_dev` WHERE `client_steamid`='%s'", steamID);
+	FormatEx(query, sizeof(query), "SELECT `group_name`, `group_filter`, `text_chat`, `voice_chat` FROM `groups_mute` WHERE `client_steamid`='%s'", steamID);
 	g_hDB.Query(DB_OnGetClientGroupMutes, query, userid);
 	
-	FormatEx(query, sizeof(query), "SELECT `client_steamid`, `text_chat`, `voice_chat` FROM `clients_mute_dev` WHERE `target_steamid`='%s'", steamID);
+	FormatEx(query, sizeof(query), "SELECT `client_steamid`, `text_chat`, `voice_chat` FROM `clients_mute` WHERE `target_steamid`='%s'", steamID);
 	g_hDB.Query(DB_OnGetTargetClientMutes, query, userid);
 }
 
@@ -1690,7 +1742,7 @@ void DeleteMuteFromDatabase(int client, const char[] id, MuteTarget muteTarget) 
 	
 	char query[124];
 	FormatEx(query, sizeof(query), "DELETE FROM `%s` WHERE `client_steamid`='%s' AND `%s`='%s'", 
-	(muteTarget == MuteTarget_Client) ? "clients_mute_dev" : "groups_mute_dev",
+	(muteTarget == MuteTarget_Client) ? "clients_mute" : "groups_mute",
 	g_PlayerData[client].steamID,
 	(muteTarget == MuteTarget_Client) ? "target_steamid" : "group_filter",
 	id);
@@ -1726,7 +1778,7 @@ bool IsThisMutedPerma(int client, const char[] id, MuteTarget muteTarget, bool r
 
 void SaveSelfMuteClient(int client, int target) {
 	char query[512];
-	FormatEx(query, sizeof(query), "INSERT INTO `clients_mute_dev` (`client_name`, `client_steamid`, `target_name`, `target_steamid`,"
+	FormatEx(query, sizeof(query), "INSERT INTO `clients_mute` (`client_name`, `client_steamid`, `target_name`, `target_steamid`,"
 									... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
 									... "ON DUPLICATE KEY UPDATE `client_name`='%s', `target_name`='%s', `text_chat`=%d, `voice_chat`=%d",
 									g_PlayerData[client].name, g_PlayerData[client].steamID, g_PlayerData[target].name,
@@ -1748,7 +1800,7 @@ void SaveSelfMuteClient(int client, int target) {
 
 void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 	char query[512];
-	FormatEx(query, sizeof(query), "INSERT INTO `groups_mute_dev` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
+	FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
 									... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
 									... "ON DUPLICATE KEY UPDATE `client_name`='%s', `text_chat`=%d, `voice_chat`=%d",
 									g_PlayerData[client].name, g_PlayerData[client].steamID, g_sGroupsNames[view_as<int>(groupFilter)],
@@ -1943,4 +1995,146 @@ int GetClientBySteamID(const char[] steamID) {
 	}
 
 	return -1;
+}
+
+/* Thanks to Botox Original Self-Mute plugin for the radio commands part */
+int g_MsgDest;
+int g_MsgClient;
+char g_MsgName[256];
+char g_MsgParam1[256];
+char g_MsgParam2[256];
+char g_MsgParam3[256];
+char g_MsgParam4[256];
+char g_MsgRadioSound[256];
+int g_MsgPlayersNum;
+int g_MsgPlayers[MAXPLAYERS + 1];
+
+public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle bf, const int[] players, int playersNum, bool reliable, bool init) {
+	if(g_bIsProtoBuf) {
+		g_MsgDest = PbReadInt(bf, "msg_dst");
+		g_MsgClient = PbReadInt(bf, "client");
+		PbReadString(bf, "msg_name", g_MsgName, sizeof(g_MsgName));
+		PbReadString(bf, "params", g_MsgParam1, sizeof(g_MsgParam1), 0);
+		PbReadString(bf, "params", g_MsgParam2, sizeof(g_MsgParam2), 1);
+		PbReadString(bf, "params", g_MsgParam3, sizeof(g_MsgParam3), 2);
+		PbReadString(bf, "params", g_MsgParam4, sizeof(g_MsgParam4), 3);
+	}
+	else {
+		g_MsgDest = BfReadByte(bf);
+		g_MsgClient = BfReadByte(bf);
+		BfReadString(bf, g_MsgName, sizeof(g_MsgName), false);
+		BfReadString(bf, g_MsgParam1, sizeof(g_MsgParam1), false);
+		BfReadString(bf, g_MsgParam2, sizeof(g_MsgParam2), false);
+		BfReadString(bf, g_MsgParam3, sizeof(g_MsgParam3), false);
+		BfReadString(bf, g_MsgParam4, sizeof(g_MsgParam4), false);
+	}
+
+	// Check which clients need to be excluded.
+	g_MsgPlayersNum = 0;
+	for(int i = 0; i < playersNum; i++) {
+		int client = players[i];
+		if(!(g_bClientText[client][g_MsgClient] || g_bClientVoice[client][g_MsgClient]))
+			g_MsgPlayers[g_MsgPlayersNum++] = client;
+	}
+
+	// No clients were excluded.
+	if(g_MsgPlayersNum == playersNum) {
+		g_MsgClient = -1;
+		return Plugin_Continue;
+	} else if(g_MsgPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
+		g_MsgClient = -2;
+		return Plugin_Handled;
+	}
+
+	return Plugin_Handled;
+}
+
+public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle bf, const int[] players, int playersNum, bool reliable, bool init) {
+	if(g_MsgClient == -1) {
+		return Plugin_Continue;
+	} else if(g_MsgClient == -2) {
+		return Plugin_Handled;
+	}
+
+	if(g_bIsProtoBuf) {
+		PbReadString(bf, "radio_sound", g_MsgRadioSound, sizeof(g_MsgRadioSound));
+	} else {
+		BfReadString(bf, g_MsgRadioSound, sizeof(g_MsgRadioSound), false);
+	}
+	
+	if(strcmp(g_MsgRadioSound, "radio.locknload") == 0) {
+		return Plugin_Continue;
+	}
+
+	DataPack pack = new DataPack();
+	pack.WriteCell(g_MsgDest);
+	pack.WriteCell(g_MsgClient);
+	pack.WriteString(g_MsgName);
+	pack.WriteString(g_MsgParam1);
+	pack.WriteString(g_MsgParam2);
+	pack.WriteString(g_MsgParam3);
+	pack.WriteString(g_MsgParam4);
+	pack.WriteString(g_MsgRadioSound);
+	pack.WriteCell(g_MsgPlayersNum);
+
+	for(int i = 0; i < g_MsgPlayersNum; i++) {
+		pack.WriteCell(g_MsgPlayers[i]);
+	}
+	
+	RequestFrame(OnPlayerRadio, pack);
+
+	return Plugin_Handled;
+}
+
+public void OnPlayerRadio(DataPack pack)
+{
+	pack.Reset();
+	g_MsgDest = pack.ReadCell();
+	g_MsgClient = pack.ReadCell();
+	pack.ReadString(g_MsgName, sizeof(g_MsgName));
+	pack.ReadString(g_MsgParam1, sizeof(g_MsgParam1));
+	pack.ReadString(g_MsgParam2, sizeof(g_MsgParam2));
+	pack.ReadString(g_MsgParam3, sizeof(g_MsgParam3));
+	pack.ReadString(g_MsgParam4, sizeof(g_MsgParam4));
+	pack.ReadString(g_MsgRadioSound, sizeof(g_MsgRadioSound));
+	g_MsgPlayersNum = pack.ReadCell();
+
+	int playersNum = 0;
+	for(int i = 0; i < g_MsgPlayersNum; i++) {
+		int client_ = pack.ReadCell();
+		if(IsClientInGame(client_)) {
+			g_MsgPlayers[playersNum++] = client_;
+		}
+	}
+	
+	delete pack;
+
+	Handle RadioText = StartMessage("RadioText", g_MsgPlayers, playersNum, USERMSG_RELIABLE);
+	if(g_bIsProtoBuf) {
+		PbSetInt(RadioText, "msg_dst", g_MsgDest);
+		PbSetInt(RadioText, "client", g_MsgClient);
+		PbSetString(RadioText, "msg_name", g_MsgName);
+		PbSetString(RadioText, "params", g_MsgParam1, 0);
+		PbSetString(RadioText, "params", g_MsgParam2, 1);
+		PbSetString(RadioText, "params", g_MsgParam3, 2);
+		PbSetString(RadioText, "params", g_MsgParam4, 3);
+	} else {
+		BfWriteByte(RadioText, g_MsgDest);
+		BfWriteByte(RadioText, g_MsgClient);
+		BfWriteString(RadioText, g_MsgName);
+		BfWriteString(RadioText, g_MsgParam1);
+		BfWriteString(RadioText, g_MsgParam2);
+		BfWriteString(RadioText, g_MsgParam3);
+		BfWriteString(RadioText, g_MsgParam4);
+	}
+	
+	EndMessage();
+
+	Handle SendAudio = StartMessage("SendAudio", g_MsgPlayers, playersNum, USERMSG_RELIABLE);
+	if(g_bIsProtoBuf) {
+		PbSetString(SendAudio, "radio_sound", g_MsgRadioSound);
+	} else {
+		BfWriteString(SendAudio, g_MsgRadioSound);
+	}
+	EndMessage();
 }
