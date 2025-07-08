@@ -143,7 +143,7 @@ public Plugin myinfo = {
 	name 			= "SelfMute V2",
 	author 			= "Dolly",
 	description 	= "Ignore other players in text and voicechat.",
-	version 		= "1.0.3",
+	version 		= "1.0.4",
 	url 			= ""
 };
 
@@ -492,7 +492,7 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 					char itemText[128];
 					
 					MuteType checkMuteType = GetMuteType(g_bClientText[client][i], g_bClientVoice[client][i]);
-					// does \n work here? if not please edit it xd
+
 					FormatEx(itemText, sizeof(itemText), "(#%d) %s\nPermanent: %s\nVoice Chat: %s\nText Chat: %s",
 														userid,
 														g_PlayerData[i].name,
@@ -1428,10 +1428,15 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 		muteType = view_as<MuteType>(g_cvDefaultMuteTypeSettings.IntValue);
 		muteDuration = view_as<MuteDuration>(g_cvDefaultMuteDurationSettings.IntValue);
 		
+		char steamIDEscaped[sizeof(steamID) * 2 + 1];
+		if(!g_hDB.Escape(steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
+			return;
+		}
+		
 		char query[120];
 		FormatEx(query, sizeof(query), "INSERT INTO `clients_data` ("
 										... "`client_steamid`, `mute_type`, `mute_duration`)"
-										... "VALUES ('%s', %d, %d)", steamID, view_as<int>(muteType), view_as<int>(muteDuration));
+										... "VALUES ('%s', %d, %d)", steamIDEscaped, view_as<int>(muteType), view_as<int>(muteDuration));
 		g_hDB.Query(DB_OnAddData, query);
 	}
 	
@@ -1777,14 +1782,26 @@ bool IsThisMutedPerma(int client, const char[] id, MuteTarget muteTarget, bool r
 }
 
 void SaveSelfMuteClient(int client, int target) {
+	char clientName[sizeof(PlayerData::name) * 2 + 1];
+	char clientSteamID[sizeof(PlayerData::steamID) * 2 + 1];
+	char targetName[sizeof(PlayerData::name) * 2 + 1];
+	char targetSteamID[sizeof(PlayerData::steamID) * 2 + 1];
+	
+	if(!g_hDB.Escape(g_PlayerData[client].name, clientName, sizeof(clientName))
+		|| !g_hDB.Escape(g_PlayerData[client].steamID, clientSteamID, sizeof(clientSteamID))
+		|| !g_hDB.Escape(g_PlayerData[target].name, targetName, sizeof(targetName))
+		|| !g_hDB.Escape(g_PlayerData[target].steamID, targetSteamID, sizeof(targetSteamID))) {
+		return;
+	}
+	
 	char query[512];
 	FormatEx(query, sizeof(query), "INSERT INTO `clients_mute` (`client_name`, `client_steamid`, `target_name`, `target_steamid`,"
 									... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
 									... "ON DUPLICATE KEY UPDATE `client_name`='%s', `target_name`='%s', `text_chat`=%d, `voice_chat`=%d",
-									g_PlayerData[client].name, g_PlayerData[client].steamID, g_PlayerData[target].name,
-									g_PlayerData[target].steamID, view_as<int>(g_bClientText[client][target]),
+									clientName, clientSteamID, targetName,
+									targetSteamID, view_as<int>(g_bClientText[client][target]),
 									view_as<int>(g_bClientVoice[client][target]), 
-									g_PlayerData[client].name, g_PlayerData[target].name,
+									clientName, targetName,
 									view_as<int>(g_bClientText[client][target]),
 									view_as<int>(g_bClientVoice[client][target]));
 									
@@ -1799,14 +1816,25 @@ void SaveSelfMuteClient(int client, int target) {
 }
 
 void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
+	char clientName[sizeof(PlayerData::name) * 2 + 1];
+	char clientSteamID[sizeof(PlayerData::steamID) * 2 + 1];
+	char groupName[32 * 2 + 1];
+	char groupFilterC[20 * 2 + 1];
+	
+	if(!g_hDB.Escape(g_PlayerData[client].name, clientName, sizeof(clientName))
+		|| !g_hDB.Escape(g_PlayerData[client].steamID, clientSteamID, sizeof(clientSteamID))
+		|| !g_hDB.Escape(g_sGroupsNames[view_as<int>(groupFilter)], groupName, sizeof(groupName))
+		|| !g_hDB.Escape(g_sGroupsFilters[view_as<int>(groupFilter)], groupFilterC, sizeof(groupFilterC))) {
+		return;
+	}
 	char query[512];
 	FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
 									... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
 									... "ON DUPLICATE KEY UPDATE `client_name`='%s', `text_chat`=%d, `voice_chat`=%d",
-									g_PlayerData[client].name, g_PlayerData[client].steamID, g_sGroupsNames[view_as<int>(groupFilter)],
-									g_sGroupsFilters[view_as<int>(groupFilter)], view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
+									clientName, clientSteamID, groupName,
+									groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
 									view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]), 
-									g_PlayerData[client].name,
+									clientName,
 									view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
 									view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
 									
