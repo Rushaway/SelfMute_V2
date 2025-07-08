@@ -143,7 +143,7 @@ public Plugin myinfo = {
 	name 			= "SelfMute V2",
 	author 			= "Dolly",
 	description 	= "Ignore other players in text and voicechat.",
-	version 		= "1.0.4",
+	version 		= "1.0.5",
 	url 			= ""
 };
 
@@ -667,6 +667,10 @@ void ShowSelfMuteSpecificTargets(int client, MuteTarget muteTarget) {
 		case MuteTarget_Client: {
 			for (int i = 1; i <= MaxClients; i++) {
 				if(!IsClientInGame(i)) {
+					continue;
+				}
+				
+				if(i == client) {
 					continue;
 				}
 				
@@ -1387,6 +1391,16 @@ public void OnClientPostAdminCheck(int client) {
 		/* Impossible to happen */
 		return;
 	}
+
+	char clientName[MAX_NAME_LENGTH];
+	if(!GetClientName(client, clientName, sizeof(clientName))) {
+		return;
+	}
+	
+	MuteType muteType = view_as<MuteType>(g_cvDefaultMuteTypeSettings.IntValue);
+	MuteDuration muteDuration = view_as<MuteDuration>(g_cvDefaultMuteDurationSettings.IntValue);
+	
+	g_PlayerData[client].Setup(clientName, steamID, muteType, muteDuration);
 	
 	char query[1024];
 	FormatEx(query, sizeof(query), "SELECT `client_steamid`,`mute_type`,`mute_duration` FROM `clients_data` WHERE `client_steamid`='%s'", steamID);
@@ -1404,58 +1418,47 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 		return;
 	}
 	
-	char clientName[32];
-	if (!GetClientName(client, clientName, sizeof(clientName))) {
-		return;
-	}
-	
 	char steamID[20];
-	MuteType muteType;
-	MuteDuration muteDuration;
-	
+
 	bool newPlayer = false;
 	if(results.FetchRow()) {
 		results.FetchString(0, steamID, sizeof(steamID));
-		muteType = view_as<MuteType>(results.FetchInt(1));
-		muteDuration = view_as<MuteDuration>(results.FetchInt(2));
+		g_PlayerData[client].muteType = view_as<MuteType>(results.FetchInt(1));
+		g_PlayerData[client].muteDuration = view_as<MuteDuration>(results.FetchInt(2));
 	} else {
 		newPlayer = true;
 		
-		if(!GetClientAuthId(client, AuthId_Steam2, steamID, sizeof(steamID))) {
-			return;
-		}
-		
-		muteType = view_as<MuteType>(g_cvDefaultMuteTypeSettings.IntValue);
-		muteDuration = view_as<MuteDuration>(g_cvDefaultMuteDurationSettings.IntValue);
-		
 		char steamIDEscaped[sizeof(steamID) * 2 + 1];
-		if(!g_hDB.Escape(steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
+		if(!g_hDB.Escape(g_PlayerData[client].steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
 			return;
 		}
 		
 		char query[120];
 		FormatEx(query, sizeof(query), "INSERT INTO `clients_data` ("
 										... "`client_steamid`, `mute_type`, `mute_duration`)"
-										... "VALUES ('%s', %d, %d)", steamIDEscaped, view_as<int>(muteType), view_as<int>(muteDuration));
+										... "VALUES ('%s', %d, %d)", steamIDEscaped, view_as<int>(g_PlayerData[client].muteType), view_as<int>(g_PlayerData[client].muteDuration));
 		g_hDB.Query(DB_OnAddData, query);
 	}
-	
-	g_PlayerData[client].Setup(clientName, steamID, muteType, muteDuration);
 	
 	/* Check if the player is connecting for the first time after the plugin is added, if so we dont want to run any sql code */
 	if(newPlayer) {
 		return;
 	}
 	
+	char steamIDEscaped[sizeof(steamID) * 2 + 1];
+	if(!g_hDB.Escape(g_PlayerData[client].steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
+		return;
+	}
+		
 	/* Now get mute list duh, get both the client as a client and as a target */
 	char query[200];
-	FormatEx(query, sizeof(query), "SELECT `target_name`, `target_steamid`, `text_chat`, `voice_chat` FROM `clients_mute` WHERE `client_steamid`='%s'", steamID);
+	FormatEx(query, sizeof(query), "SELECT `target_name`, `target_steamid`, `text_chat`, `voice_chat` FROM `clients_mute` WHERE `client_steamid`='%s'", steamIDEscaped);
 	g_hDB.Query(DB_OnGetClientClientMutes, query, userid);
 	
-	FormatEx(query, sizeof(query), "SELECT `group_name`, `group_filter`, `text_chat`, `voice_chat` FROM `groups_mute` WHERE `client_steamid`='%s'", steamID);
+	FormatEx(query, sizeof(query), "SELECT `group_name`, `group_filter`, `text_chat`, `voice_chat` FROM `groups_mute` WHERE `client_steamid`='%s'", steamIDEscaped);
 	g_hDB.Query(DB_OnGetClientGroupMutes, query, userid);
 	
-	FormatEx(query, sizeof(query), "SELECT `client_steamid`, `text_chat`, `voice_chat` FROM `clients_mute` WHERE `target_steamid`='%s'", steamID);
+	FormatEx(query, sizeof(query), "SELECT `client_steamid`, `text_chat`, `voice_chat` FROM `clients_mute` WHERE `target_steamid`='%s'", steamIDEscaped);
 	g_hDB.Query(DB_OnGetTargetClientMutes, query, userid);
 }
 
