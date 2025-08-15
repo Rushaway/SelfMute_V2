@@ -12,6 +12,13 @@
 #tryinclude <Voice>
 #define REQUIRE_PLUGIN
 
+/* If your server doesn't have zombiereloaded but you have the zombiereloaded include file, then uncomment this: */
+/*
+#if defined _zr_included
+#undef _zr_included
+#endif
+*/
+
 #pragma newdecls required
 
 #define DEBUG
@@ -143,7 +150,7 @@ public Plugin myinfo = {
 	name 			= "SelfMute V2",
 	author 			= "Dolly",
 	description 	= "Ignore other players in text and voicechat.",
-	version 		= "1.0.5",
+	version 		= "1.0.6",
 	url 			= ""
 };
 
@@ -1948,6 +1955,10 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		return false;
 	}
 
+	if(!IsClientInGame(client)) {
+		return false;
+	}
+			
 	int team = GetClientTeam(client);
 	switch(groupFilter) {
 		case GROUP_ALL: {
@@ -1955,10 +1966,6 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 		
 		case GROUP_CTS: {
-			if(!IsClientInGame(client)) {
-				return false;
-			}
-			
 			if(g_Plugin_zombiereloaded) {
 				if(!IsPlayerAlive(client) || !ZR_IsClientHuman(client)) {
 					return false;
@@ -1973,10 +1980,6 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 	
 		case GROUP_TS: {
-			if(!IsClientInGame(client)) {
-				return false;
-			}
-			
 			if(g_Plugin_zombiereloaded) {
 				if(!IsPlayerAlive(client) || !ZR_IsClientZombie(client)) {
 					return false;
@@ -1991,10 +1994,6 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 		
 		case GROUP_SPECTATORS: {
-			if(!IsClientInGame(client)) {
-				return false;
-			}
-			
 			if(team != CS_TEAM_SPECTATOR || team != CS_TEAM_NONE) {
 				return false;
 			}
