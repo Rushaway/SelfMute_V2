@@ -48,6 +48,9 @@ bool g_bClientGroupVoice[MAXPLAYERS + 1][view_as<int>(GROUP_MAX_NUM)];
 /* ProtoBuf bool */
 bool g_bIsProtoBuf = false;
 
+/* Sqlite bool */
+bool g_bSQLLite = false;
+
 /* ConVar List */
 ConVar g_cvMuteAdmins;
 ConVar g_cvMuteAdminsPerma;
@@ -107,6 +110,7 @@ enum struct PlayerData {
 	MuteType muteType;
 	MuteDuration muteDuration;
 	ArrayList mutesList;
+	bool addedToDB;
 	
 	void Reset() {
 		this.name[0] = '\0';
@@ -114,6 +118,7 @@ enum struct PlayerData {
 		this.muteType = view_as<MuteType>(g_cvDefaultMuteTypeSettings.IntValue);
 		this.muteDuration = view_as<MuteDuration>(g_cvDefaultMuteDurationSettings.IntValue);
 		delete this.mutesList;
+		this.addedToDB = false;
 	}
 	
 	void Setup(char[] nameEx, char[] steamIDEx, MuteType muteTypeEx, MuteDuration muteDurationEx) {
@@ -122,6 +127,7 @@ enum struct PlayerData {
 		this.muteType = muteTypeEx;
 		this.muteDuration = muteDurationEx;
 		this.mutesList = new ArrayList(ByteCountToCells(1024));
+		this.addedToDB = false;
 	}
 }
 
@@ -150,7 +156,7 @@ public Plugin myinfo = {
 	name 			= "SelfMute V2",
 	author 			= "Dolly",
 	description 	= "Ignore other players in text and voicechat.",
-	version 		= "1.0.6",
+	version 		= "1.1.2",
 	url 			= ""
 };
 
@@ -210,7 +216,7 @@ public void OnPluginStart() {
 	CSetPrefix(PLUGIN_PREFIX);
 	
 	/* Radio Commands */
-	if(GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf) {
+	if (GetFeatureStatus(FeatureType_Native, "GetUserMessageType") == FeatureStatus_Available && GetUserMessageType() == UM_Protobuf) {
 		g_bIsProtoBuf = true;
 	}
 	
@@ -225,13 +231,13 @@ public void OnPluginStart() {
 	HookUserMessage(msgSendAudio, Hook_UserMessageSendAudio, true);
 
 	/* Incase of a late load */
-	if(g_bLate) {
+	if (g_bLate) {
 		for (int i = 1; i <= MaxClients; i++) {
-			if(!IsClientInGame(i)) {
+			if (!IsClientInGame(i)) {
 				continue;
 			}
 			
-			if(IsClientAuthorized(i)) {
+			if (IsClientAuthorized(i)) {
 				OnClientPostAdminCheck(i);
 			}
 		}
@@ -239,7 +245,7 @@ public void OnPluginStart() {
 }
 
 Action Command_SmCookies(int client, int args) {
-	if(!client) {
+	if (!client) {
 		return Plugin_Handled;
 	}
 	
@@ -267,7 +273,7 @@ int Menu_ShowCookies(Menu menu, MenuAction action, int param1, int param2) {
 		case MenuAction_Select: {
 			char option[2];
 			menu.GetItem(param2, option, sizeof(option));
-			if(StrEqual(option, "0")) {
+			if (StrEqual(option, "0")) {
 				ShowCookiesMuteTypeMenu(param1);
 			} else {
 				ShowCookiesMuteDurationMenu(param1);
@@ -310,7 +316,7 @@ int Menu_ShowCookiesMuteTypeMenu(Menu menu, MenuAction action, int param1, int p
 		}
 		
 		case MenuAction_Cancel: {
-			if(param2 == MenuCancel_ExitBack) {
+			if (param2 == MenuCancel_ExitBack) {
 				ShowCookiesMenu(param1);
 			}
 		}
@@ -322,6 +328,7 @@ int Menu_ShowCookiesMuteTypeMenu(Menu menu, MenuAction action, int param1, int p
 			g_PlayerData[param1].muteType = muteType;
 			CPrintToChat(param1, "Cookie Saved!");
 			ShowCookiesMuteTypeMenu(param1);
+			DB_UpdateClientData(param1, 0); // 0 = mute type
 		}
 	}
 	
@@ -335,7 +342,7 @@ int Menu_ShowCookiesMuteDurationMenu(Menu menu, MenuAction action, int param1, i
 		}
 		
 		case MenuAction_Cancel: {
-			if(param2 == MenuCancel_ExitBack) {
+			if (param2 == MenuCancel_ExitBack) {
 				ShowCookiesMenu(param1);
 			}
 		}
@@ -347,13 +354,14 @@ int Menu_ShowCookiesMuteDurationMenu(Menu menu, MenuAction action, int param1, i
 			g_PlayerData[param1].muteDuration = muteDuration;
 			CPrintToChat(param1, "Cookie Saved!");
 			ShowCookiesMuteDurationMenu(param1);
+			DB_UpdateClientData(param1, 1); // 1 = mute duration
 		}
 	}
 	
 	return 1;
 }
 Action Command_CheckMutes(int client, int args) {
-	if(!client) {
+	if (!client) {
 		return Plugin_Handled;
 	}
 	
@@ -362,27 +370,27 @@ Action Command_CheckMutes(int client, int args) {
 }
 
 Action Command_SelfUnMuteAll(int client, int args) {
-	if(!client) {
+	if (!client) {
 		return Plugin_Handled;
 	}
 	
-	if(!IsClientAuthorized(client)) {
+	if (!IsClientAuthorized(client)) {
 		CReplyToCommand(client, "You need to be authorized to use this command. Please rejoin.");
 		return Plugin_Handled;
 	}
 	
 	for (int i = 1; i <= MaxClients; i++) {
-		if(!IsClientInGame(i) || i == client) {
+		if (!IsClientInGame(i) || i == client) {
 			continue;
 		}
 		
-		if(g_bClientText[client][i] || g_bClientVoice[client][i]) {
+		if (g_bClientText[client][i] || g_bClientVoice[client][i]) {
 			ApplySelfUnMute(client, i);
 		}
 	}
 	
 	for (int i = 0; i < view_as<int>(GROUP_MAX_NUM); i++) {
-		if(g_bClientGroupText[client][i] || g_bClientGroupVoice[client][i]) {
+		if (g_bClientGroupText[client][i] || g_bClientGroupVoice[client][i]) {
 			ApplySelfUnMuteGroup(client, view_as<GroupFilter>(i));
 		}
 	}
@@ -392,16 +400,16 @@ Action Command_SelfUnMuteAll(int client, int args) {
 }
 
 Action Command_SelfUnMute(int client, int args) {
-	if(!client) {
+	if (!client) {
 		return Plugin_Handled;
 	}
 	
-	if(!IsClientAuthorized(client)) {
+	if (!IsClientAuthorized(client)) {
 		CReplyToCommand(client, "You need to be authorized to use this command. Please rejoin.");
 		return Plugin_Handled;
 	}
 	
-	if(!GetCmdArgs()) {
+	if (!GetCmdArgs()) {
 		OpenSelfMuteMenu(client);
 		return Plugin_Handled;
 	}
@@ -409,27 +417,27 @@ Action Command_SelfUnMute(int client, int args) {
 	char arg1[32];
 	GetCmdArg(1, arg1, sizeof(arg1));
 	
-	if(arg1[0] == '@') {
+	if (arg1[0] == '@') {
 		HandleGroupSelfUnMute(client, arg1);
 		return Plugin_Handled;
 	}
 	
 	int target = FindTarget(client, arg1, false, false);
-	if(target == -1) {
+	if (target == -1) {
 		return Plugin_Handled;
 	}
 	
-	if(target == client) {
+	if (target == client) {
 		CReplyToCommand(client, "Silly, you cannot un-mute yourself!");
 		return Plugin_Handled;
 	}
 	
-	if(!g_bClientText[client][target] && !g_bClientVoice[client][target]) {
+	if (!g_bClientText[client][target] && !g_bClientVoice[client][target]) {
 		CReplyToCommand(client, "You do not have this player self-muted.");
 		return Plugin_Handled;
 	}
 	
-	if(IsFakeClient(target) && !IsClientSourceTV(target)) {
+	if (IsFakeClient(target) && !IsClientSourceTV(target)) {
 		CReplyToCommand(client, "You cannot target a bot.");
 		return Plugin_Handled;
 	}
@@ -482,15 +490,15 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 	switch(muteTarget) {
 		case MuteTarget_Client: {
 			for (int i = 1; i <= MaxClients; i++) {
-				if(i == client) {
+				if (i == client) {
 					continue;
 				}
 				
-				if(!IsClientInGame(i)) {
+				if (!IsClientInGame(i)) {
 					continue;
 				}
 				
-				if(g_bClientText[client][i] || g_bClientVoice[client][i]) {
+				if (g_bClientText[client][i] || g_bClientVoice[client][i]) {
 					bool perma = IsThisMutedPerma(client, g_PlayerData[i].steamID, muteTarget);
 					int userid = GetClientUserId(i);
 
@@ -516,7 +524,7 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 		
 		case MuteTarget_Group: {
 			for (int i = 0; i < view_as<int>(GROUP_MAX_NUM); i++) {
-				if(g_bClientGroupText[client][i] || g_bClientGroupVoice[client][i]) {
+				if (g_bClientGroupText[client][i] || g_bClientGroupVoice[client][i]) {
 					bool perma = IsThisMutedPerma(client, g_sGroupsFilters[i], muteTarget);
 					
 					char itemInfo[22];
@@ -539,7 +547,7 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 		}
 	}
 	
-	if(!found) {
+	if (!found) {
 		menu.AddItem(NULL_STRING, "No result was found!", ITEMDRAW_DISABLED);
 	}
 	
@@ -554,7 +562,7 @@ int Menu_ShowTargets(Menu menu, MenuAction action, int param1, int param2) {
 		}
 		
 		case MenuAction_Cancel: {
-			if(param2 == MenuCancel_ExitBack) {
+			if (param2 == MenuCancel_ExitBack) {
 				OpenSelfMuteMenu(param1);
 			}
 		}
@@ -567,9 +575,9 @@ int Menu_ShowTargets(Menu menu, MenuAction action, int param1, int param2) {
 			ExplodeString(option, "|", options, 2, 14);
 
 			MuteTarget muteTarget = view_as<MuteTarget>(StringToInt(options[0]));
-			if(muteTarget == MuteTarget_Client) {
+			if (muteTarget == MuteTarget_Client) {
 				int target = GetClientOfUserId(StringToInt(options[1]));
-				if(!target) {
+				if (!target) {
 					CPrintToChat(param1, "Player is no longer available");
 					return 1;
 				}
@@ -588,11 +596,11 @@ int Menu_ShowTargets(Menu menu, MenuAction action, int param1, int param2) {
 }
 
 Action Command_SelfMute(int client, int args) {
-	if(!client) {
+	if (!client) {
 		return Plugin_Handled;
 	}
 	
-	if(!IsClientAuthorized(client)) {
+	if (!IsClientAuthorized(client)) {
 		CReplyToCommand(client, "You need to be authorized to use this command. Please rejoin.");
 		return Plugin_Handled;
 	}
@@ -600,32 +608,32 @@ Action Command_SelfMute(int client, int args) {
 	char arg1[32];
 	GetCmdArg(1, arg1, sizeof(arg1));
 	
-	if(!GetCmdArgs()) {
+	if (!GetCmdArgs()) {
 		ShowSelfMuteTargetsMenu(client);
 		return Plugin_Handled;
 	}
 	
-	if(arg1[0] == '@') {
+	if (arg1[0] == '@') {
 		HandleGroupSelfMute(client, arg1, g_PlayerData[client].muteType, g_PlayerData[client].muteDuration);
 		return Plugin_Handled;
 	}
 	
 	int target = FindTarget(client, arg1, false, false);
-	if(target == -1) {
+	if (target == -1) {
 		return Plugin_Handled;
 	}
 	
-	if(target == client) {
+	if (target == client) {
 		CReplyToCommand(client, "Silly, you cannot mute yourself!");
 		return Plugin_Handled;
 	}
 
-	if(!g_cvMuteAdmins.BoolValue && IsClientAdmin(target)) {
+	if (!g_cvMuteAdmins.BoolValue && IsClientAdmin(target)) {
 		CReplyToCommand(client, "You cannot self-mute an admin.");
 		return Plugin_Handled;
 	}
 	
-	if(IsFakeClient(target) && !IsClientSourceTV(target)) {
+	if (IsFakeClient(target) && !IsClientSourceTV(target)) {
 		CReplyToCommand(client, "You cannot target a bot.");
 		return Plugin_Handled;
 	}
@@ -673,19 +681,19 @@ void ShowSelfMuteSpecificTargets(int client, MuteTarget muteTarget) {
 	switch(muteTarget) {
 		case MuteTarget_Client: {
 			for (int i = 1; i <= MaxClients; i++) {
-				if(!IsClientInGame(i)) {
+				if (!IsClientInGame(i)) {
 					continue;
 				}
 				
-				if(i == client) {
+				if (i == client) {
 					continue;
 				}
 				
-				if(IsFakeClient(i) && !IsClientSourceTV(i)) {
+				if (IsFakeClient(i) && !IsClientSourceTV(i)) {
 					continue;
 				}
 				
-				if(!IsClientAuthorized(i)) {
+				if (!IsClientAuthorized(i)) {
 					continue;
 				}
 				
@@ -727,7 +735,7 @@ int Menu_ShowSelfMuteSpecificTargets(Menu menu, MenuAction action, int param1, i
 		}
 		
 		case MenuAction_Cancel: {
-			if(param2 == MenuCancel_ExitBack) {
+			if (param2 == MenuCancel_ExitBack) {
 				ShowSelfMuteTargetsMenu(param1);
 			}
 		}
@@ -740,19 +748,19 @@ int Menu_ShowSelfMuteSpecificTargets(Menu menu, MenuAction action, int param1, i
 			ExplodeString(option, "|", options, 2, 14);
 			
 			MuteTarget muteTarget = view_as<MuteTarget>(StringToInt(options[0]));
-			if(muteTarget == MuteTarget_Client) {
+			if (muteTarget == MuteTarget_Client) {
 				int target = GetClientOfUserId(StringToInt(options[1]));
-				if(!target) {
+				if (!target) {
 					CPrintToChat(param1, "Player is no longer available");
 					return 1;
 				}
 				
 				MuteType muteType = GetMuteType(g_bClientText[param1][target], g_bClientVoice[param1][target]);
-				if(muteType == MuteType_All) {
+				if (muteType == MuteType_All) {
 					return 1;
 				}
 				
-				if(muteType == g_PlayerData[param1].muteType) {
+				if (muteType == g_PlayerData[param1].muteType) {
 					CPrintToChat(param1, "You have already self-muted this player. If you want to self-mute another type of chat please change your settings in {olive}!smcookies");
 					ShowSelfMuteSpecificTargets(param1, muteTarget);
 					return 1;
@@ -763,11 +771,11 @@ int Menu_ShowSelfMuteSpecificTargets(Menu menu, MenuAction action, int param1, i
 				GroupFilter groupFilter = GetGroupFilterByChar(options[1]);
 				
 				MuteType muteType = GetMuteType(g_bClientGroupText[param1][view_as<int>(groupFilter)], g_bClientGroupVoice[param1][view_as<int>(groupFilter)]);
-				if(muteType == MuteType_All) {
+				if (muteType == MuteType_All) {
 					return 1;
 				}
 				
-				if(muteType == g_PlayerData[param1].muteType) {
+				if (muteType == g_PlayerData[param1].muteType) {
 					CPrintToChat(param1, "You have already self-muted this group. If you want to self-mute another type of chat please change your settings in {olive}!smcookies");
 					ShowSelfMuteSpecificTargets(param1, muteTarget);
 					return 1;
@@ -776,7 +784,7 @@ int Menu_ShowSelfMuteSpecificTargets(Menu menu, MenuAction action, int param1, i
 				HandleGroupSelfMute(param1, options[1], g_PlayerData[param1].muteType, g_PlayerData[param1].muteDuration);
 			}
 			
-			if(g_PlayerData[param1].muteType != MuteType_AskFirst && g_PlayerData[param1].muteDuration != MuteDuration_AskFirst) {
+			if (g_PlayerData[param1].muteType != MuteType_AskFirst && g_PlayerData[param1].muteDuration != MuteDuration_AskFirst) {
 				ShowSelfMuteSpecificTargets(param1, muteTarget);
 			}
 		}
@@ -788,18 +796,18 @@ int Menu_ShowSelfMuteSpecificTargets(Menu menu, MenuAction action, int param1, i
 void HandleGroupSelfUnMute(int client, const char[] groupFilterC) {
 	GroupFilter groupFilter = GROUP_MAX_NUM;
 	for (int i = 0; i < sizeof(g_sGroupsFilters); i++) {
-		if(strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0) {
+		if (strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0) {
 			groupFilter = view_as<GroupFilter>(i);
 			break;
 		}
 	}
 	
-	if(groupFilter == GROUP_MAX_NUM) {
+	if (groupFilter == GROUP_MAX_NUM) {
 		CPrintToChat(client, "Cannot find the specified group.");
 		return;
 	}
 	
-	if(!g_bClientGroupText[client][view_as<int>(groupFilter)] && !g_bClientGroupVoice[client][view_as<int>(groupFilter)]) {
+	if (!g_bClientGroupText[client][view_as<int>(groupFilter)] && !g_bClientGroupVoice[client][view_as<int>(groupFilter)]) {
 		CPrintToChat(client, "You do not have this group self-muted.");
 		return;
 	}
@@ -810,13 +818,13 @@ void HandleGroupSelfUnMute(int client, const char[] groupFilterC) {
 
 void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteType, MuteDuration muteDuration) {
 	#if defined _Voice_included
-		if(strcmp(groupFilterC, "@talking", false) == 0) {
+		if (strcmp(groupFilterC, "@talking", false) == 0) {
 			for (int i = 1; i <= MaxClients; i++) {
-				if(!IsClientInGame(i)) {
+				if (!IsClientInGame(i)) {
 					continue;
 				}
 
-				if(!IsClientTalking(i)) {
+				if (!IsClientTalking(i)) {
 					continue;
 				}
 				
@@ -829,19 +837,19 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 	
 	GroupFilter groupFilter = GROUP_MAX_NUM;
 	for (int i = 0; i < sizeof(g_sGroupsFilters); i++) {
-		if(strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0) {
+		if (strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0) {
 			groupFilter = view_as<GroupFilter>(i);
 			break;
 		}
 	}
 	
-	if(groupFilter == GROUP_MAX_NUM) {
+	if (groupFilter == GROUP_MAX_NUM) {
 		CPrintToChat(client, "Cannot find the specified group.");
 		return;
 	}
 	
 	/* we need to check if this client has selfmuted this target before */
-	if((g_bClientGroupText[client][view_as<int>(groupFilter)] && !g_bClientGroupVoice[client][view_as<int>(groupFilter)]) 
+	if ((g_bClientGroupText[client][view_as<int>(groupFilter)] && !g_bClientGroupVoice[client][view_as<int>(groupFilter)]) 
 		&& (muteType == MuteType_Voice || muteType == MuteType_All)) {
 			
 		bool perma = IsThisMutedPerma(client, g_sGroupsFilters[view_as<int>(groupFilter)], MuteTarget_Group);
@@ -850,7 +858,7 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 		return;
 	}
 	
-	if((!g_bClientGroupText[client][view_as<int>(groupFilter)] && g_bClientGroupVoice[client][view_as<int>(groupFilter)]) && (muteType == MuteType_Text || muteType == MuteType_All)) {
+	if ((!g_bClientGroupText[client][view_as<int>(groupFilter)] && g_bClientGroupVoice[client][view_as<int>(groupFilter)]) && (muteType == MuteType_Text || muteType == MuteType_All)) {
 		bool perma = IsThisMutedPerma(client, g_sGroupsFilters[view_as<int>(groupFilter)], MuteTarget_Group);
 		muteDuration = (perma) ? MuteDuration_Permanent:MuteDuration_Temporary;
 		StartSelfMuteGroup(client, groupFilter, MuteType_Text, muteDuration);
@@ -858,18 +866,18 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 	}
 	
 	MuteType muteTypeEx = GetMuteType(g_bClientGroupText[client][view_as<int>(groupFilter)], g_bClientGroupVoice[client][view_as<int>(groupFilter)]);
-	if(muteTypeEx == muteType) {
+	if (muteTypeEx == muteType) {
 		CPrintToChat(client, "You have already self-muted this group for either voice or text chats or both!");
 		return;
 	}
 
-	if(g_bClientGroupText[client][view_as<int>(groupFilter)] && g_bClientGroupVoice[client][view_as<int>(groupFilter)]) {
+	if (g_bClientGroupText[client][view_as<int>(groupFilter)] && g_bClientGroupVoice[client][view_as<int>(groupFilter)]) {
 		CPrintToChat(client, "You have already self-muted this group for its voice and text chats!");
 		return;
 	}
 	
-	if(muteType != MuteType_AskFirst) {
-		if((g_bClientGroupText[client][view_as<int>(GROUP_ALL)] && muteType == MuteType_Text)
+	if (muteType != MuteType_AskFirst) {
+		if ((g_bClientGroupText[client][view_as<int>(GROUP_ALL)] && muteType == MuteType_Text)
 			|| (g_bClientGroupVoice[client][view_as<int>(GROUP_ALL)] && muteType == MuteType_Voice)
 			|| (g_bClientGroupText[client][view_as<int>(GROUP_ALL)] && g_bClientGroupVoice[client][view_as<int>(GROUP_ALL)]
 			&& muteType == MuteType_All)) {
@@ -885,32 +893,32 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 } 
 
 void HandleClientSelfMute(int client, int target, MuteType muteType, MuteDuration muteDuration) {
-	if(!g_cvMuteAdminsPerma.BoolValue && muteDuration == MuteDuration_Permanent && IsClientAdmin(target)) {
+	if (!g_cvMuteAdminsPerma.BoolValue && muteDuration == MuteDuration_Permanent && IsClientAdmin(target)) {
 		CPrintToChat(client, "You cannot self-mute an admin Permanently.");
 		return;
 	}
 	
 	/* we need to check if this client has selfmuted this target before */
-	if((g_bClientText[client][target] && !g_bClientVoice[client][target]) && (muteType == MuteType_Voice || muteType == MuteType_All)) {
+	if ((g_bClientText[client][target] && !g_bClientVoice[client][target]) && (muteType == MuteType_Voice || muteType == MuteType_All)) {
 		bool perma = IsThisMutedPerma(client, g_PlayerData[target].steamID, MuteTarget_Client);
 		muteDuration = (perma) ? MuteDuration_Permanent:MuteDuration_Temporary;
 		StartSelfMute(client, target, MuteType_Voice, muteDuration);
 		return;
 	}
 	
-	if((!g_bClientText[client][target] && g_bClientVoice[client][target]) && (muteType == MuteType_Text || muteType == MuteType_All)) {
+	if ((!g_bClientText[client][target] && g_bClientVoice[client][target]) && (muteType == MuteType_Text || muteType == MuteType_All)) {
 		bool perma = IsThisMutedPerma(client, g_PlayerData[target].steamID, MuteTarget_Client);
 		muteDuration = (perma) ? MuteDuration_Permanent:MuteDuration_Temporary;
 		StartSelfMute(client, target, MuteType_Text, muteDuration);
 		return;
 	}
 
-	if(g_bClientText[client][target] && g_bClientVoice[client][target]) {
+	if (g_bClientText[client][target] && g_bClientVoice[client][target]) {
 		CPrintToChat(client, "You have already self-muted this player for their voice and text chats!");
 		return;
 	}
 	
-	if(muteType != MuteType_AskFirst) {
+	if (muteType != MuteType_AskFirst) {
 		StartSelfMute(client, target, muteType, muteDuration);	
 		return;
 	}
@@ -932,14 +940,14 @@ void ShowMuteTypeMenu(int client, int target) {
 	char data[12];
 	
 	int flags = ITEMDRAW_DEFAULT;
-	if(muteType == MuteType_Voice) {
+	if (muteType == MuteType_Voice) {
 		flags = ITEMDRAW_DISABLED;
 	}
 	
 	FormatEx(data, sizeof(data), "0|%d", userid);
 	menu.AddItem(data, "Voice Chat Only", flags);
 	
-	if(muteType == MuteType_Text) {
+	if (muteType == MuteType_Text) {
 		flags = ITEMDRAW_DISABLED;
 	}
 	
@@ -967,7 +975,7 @@ int Menu_ShowMuteType(Menu menu, MenuAction action, int param1, int param2) {
 			ExplodeString(option, "|", data, sizeof(data), sizeof(data[]));
 			
 			int target = GetClientOfUserId(StringToInt(data[1]));
-			if(!target) {
+			if (!target) {
 				PrintToChat(param1, "Userid: %s", data[1]);
 				CPrintToChat(param1, "Player is no longer available.");
 				return -1;
@@ -1045,7 +1053,7 @@ int Menu_ShowAlertMenu(Menu menu, MenuAction action, int param1, int param2) {
 			ExplodeString(option, "|", data, sizeof(data), sizeof(data[]));
 			
 			int target = GetClientOfUserId(StringToInt(data[2]));
-			if(!target) {
+			if (!target) {
 				CPrintToChat(param1, "Player is no longer available.");
 				return -1;
 			}
@@ -1073,7 +1081,7 @@ void ShowMuteTypeMenuGroup(int client, GroupFilter groupFilter) {
 	char data[12];
 	
 	int flags = ITEMDRAW_DEFAULT;
-	if(muteType == MuteType_Voice) {
+	if (muteType == MuteType_Voice) {
 		flags = ITEMDRAW_DISABLED;
 	}
 	
@@ -1081,7 +1089,7 @@ void ShowMuteTypeMenuGroup(int client, GroupFilter groupFilter) {
 	menu.AddItem(data, "Voice Chat Only", flags);
 	
 	flags = ITEMDRAW_DEFAULT;
-	if(muteType == MuteType_Text) {
+	if (muteType == MuteType_Text) {
 		flags = ITEMDRAW_DISABLED;
 	}
 	
@@ -1195,14 +1203,14 @@ public void OnAllPluginsLoaded() {
 
 void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast) {
 	for (int i = 1; i <= MaxClients; i++) {
-		if(!IsClientInGame(i) || IsFakeClient(i)) {
+		if (!IsClientInGame(i) || IsFakeClient(i)) {
 			continue;
 		}
 		
 		SelfUnMutePreviousGroup(i);
 		
 		for (int j = 0; j < view_as<int>(GROUP_MAX_NUM); j++) {
-			if(g_bClientGroupText[i][j] || g_bClientGroupVoice[i][j]) {
+			if (g_bClientGroupText[i][j] || g_bClientGroupVoice[i][j]) {
 				UpdateSelfMuteGroup(i, view_as<GroupFilter>(j));
 			}
 		}
@@ -1215,7 +1223,7 @@ void ConnectToDB() {
 }
 
 public void DB_OnConnect(Database db, const char[] error, any data) {
-	if(db == null || error[0]) {
+	if (db == null || error[0]) {
 		/* Failure happen. Do retry with delay */
 		CreateTimer(15.0, DB_RetryConnection);
 		#if defined DEBUG
@@ -1233,20 +1241,20 @@ public void DB_OnConnect(Database db, const char[] error, any data) {
 
 public Action DB_RetryConnection(Handle timer)
 {
-	if(g_hDB == null)
+	if (g_hDB == null)
 		ConnectToDB();
 	
 	return Plugin_Continue;
 }
 
 void DB_Tables() {
-	if(g_hDB == null) {
+	if (g_hDB == null) {
 		return;
 	}
 	
 	char driver[32];
 	g_hDB.Driver.GetIdentifier(driver, sizeof(driver));
-	if(strcmp(driver, "mysql", false) == 0) {
+	if (strcmp(driver, "mysql", false) == 0) {
 		Transaction T_mysqlTables = SQL_CreateTransaction();
 		
 		char query0[1024];		
@@ -1295,7 +1303,8 @@ void DB_Tables() {
 		T_mysqlTables.AddQuery(query0);
 		
 		g_hDB.Execute(T_mysqlTables, DB_mysqlTablesOnSuccess, DB_mysqlTablesOnError, _, DBPrio_High);
-	} else if(strcmp(driver, "sqlite", false) == 0) {
+	} else if (strcmp(driver, "sqlite", false) == 0) {
+		g_bSQLLite = true;
 		Transaction T_sqliteTables = SQL_CreateTransaction();
 		
 		char query0[1024];		
@@ -1372,12 +1381,12 @@ public void DB_sqliteTablesOnError(Database database, any data, int queries, con
 
 /* Connections Check */
 public void OnClientConnected(int client) {
-	if(!IsClientSourceTV(client)) {
+	if (!IsClientSourceTV(client)) {
 		return;
 	}
 	
 	char clientName[32];
-	if(!GetClientName(client, clientName, sizeof(clientName))) {
+	if (!GetClientName(client, clientName, sizeof(clientName))) {
 		strcopy(clientName, sizeof(clientName), "Source TV");
 	}
 	
@@ -1385,22 +1394,22 @@ public void OnClientConnected(int client) {
 }
 
 public void OnClientPostAdminCheck(int client) {
-	if(g_hDB == null)
+	if (g_hDB == null)
 		return;
 
-	if(IsFakeClient(client)) {
+	if (IsFakeClient(client)) {
 		return;
 	}
 	
 	/* Get Client Data */
 	char steamID[20];
-	if(!GetClientAuthId(client, AuthId_Steam2, steamID, sizeof(steamID))) {
+	if (!GetClientAuthId(client, AuthId_Steam2, steamID, sizeof(steamID))) {
 		/* Impossible to happen */
 		return;
 	}
 
 	char clientName[MAX_NAME_LENGTH];
-	if(!GetClientName(client, clientName, sizeof(clientName))) {
+	if (!GetClientName(client, clientName, sizeof(clientName))) {
 		return;
 	}
 	
@@ -1415,45 +1424,28 @@ public void OnClientPostAdminCheck(int client) {
 }
 
 void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, int userid) {
-	if(results == null || error[0]) {
+	if (results == null || error[0]) {
 		LogError("[Self-Mute] Could not revert client data, error: %s", error);
 		return;
 	}
 	
 	int client = GetClientOfUserId(userid);
-	if(!client) {
+	if (!client) {
 		return;
 	}
 	
 	char steamID[20];
-
-	bool newPlayer = false;
-	if(results.FetchRow()) {
+	
+	if (results.FetchRow()) {
+		g_PlayerData[client].addedToDB = true;
+		
 		results.FetchString(0, steamID, sizeof(steamID));
 		g_PlayerData[client].muteType = view_as<MuteType>(results.FetchInt(1));
 		g_PlayerData[client].muteDuration = view_as<MuteDuration>(results.FetchInt(2));
-	} else {
-		newPlayer = true;
-		
-		char steamIDEscaped[sizeof(steamID) * 2 + 1];
-		if(!g_hDB.Escape(g_PlayerData[client].steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
-			return;
-		}
-		
-		char query[120];
-		FormatEx(query, sizeof(query), "INSERT INTO `clients_data` ("
-										... "`client_steamid`, `mute_type`, `mute_duration`)"
-										... "VALUES ('%s', %d, %d)", steamIDEscaped, view_as<int>(g_PlayerData[client].muteType), view_as<int>(g_PlayerData[client].muteDuration));
-		g_hDB.Query(DB_OnAddData, query);
-	}
-	
-	/* Check if the player is connecting for the first time after the plugin is added, if so we dont want to run any sql code */
-	if(newPlayer) {
-		return;
 	}
 	
 	char steamIDEscaped[sizeof(steamID) * 2 + 1];
-	if(!g_hDB.Escape(g_PlayerData[client].steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
+	if (!g_hDB.Escape(g_PlayerData[client].steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
 		return;
 	}
 		
@@ -1469,25 +1461,18 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 	g_hDB.Query(DB_OnGetTargetClientMutes, query, userid);
 }
 
-void DB_OnAddData(Database db, DBResultSet results, const char[] error, any data) {
-	if(error[0]) {
-		LogError("[Self-Mute] Error while inserting client's data, error: %s", error);
-		return;
-	}
-}
-
 void DB_OnGetClientClientMutes(Database db, DBResultSet results, const char[] error, int userid) {
-	if(!results || error[0]) {
+	if (!results || error[0]) {
 		LogError("[Self-Mute] Error while getting client's client mutes, error: %s", error);
 		return;
 	}
 	
-	if(!results.RowCount) {
+	if (!results.RowCount) {
 		return;
 	}
 	
 	int client = GetClientOfUserId(userid);
-	if(!client) {
+	if (!client) {
 		return;
 	}
 	
@@ -1507,7 +1492,7 @@ void DB_OnGetClientClientMutes(Database db, DBResultSet results, const char[] er
 		g_PlayerData[client].mutesList.PushArray(myMute);
 		
 		int target = GetClientBySteamID(targetSteamID);
-		if(target == -1) {
+		if (target == -1) {
 			continue;
 		}
 		
@@ -1516,17 +1501,17 @@ void DB_OnGetClientClientMutes(Database db, DBResultSet results, const char[] er
 }
 
 void DB_OnGetClientGroupMutes(Database db, DBResultSet results, const char[] error, int userid) {
-	if(!results || error[0]) {
+	if (!results || error[0]) {
 		LogError("[Self-Mute] Error while getting client's group mutes, error: %s", error);
 		return;
 	}
 	
-	if(!results.RowCount) {
+	if (!results.RowCount) {
 		return;
 	}
 	
 	int client = GetClientOfUserId(userid);
-	if(!client) {
+	if (!client) {
 		return;
 	}
 	
@@ -1550,17 +1535,17 @@ void DB_OnGetClientGroupMutes(Database db, DBResultSet results, const char[] err
 }
 
 void DB_OnGetTargetClientMutes(Database db, DBResultSet results, const char[] error, int userid) {
-	if(!results || error[0]) {
+	if (!results || error[0]) {
 		LogError("[Self-Mute] Error while getting target's client mutes, error: %s", error);
 		return;
 	}
 	
-	if(!results.RowCount) {
+	if (!results.RowCount) {
 		return;
 	}
 	
 	int target = GetClientOfUserId(userid);
-	if(!target) {
+	if (!target) {
 		return;
 	}
 	
@@ -1573,7 +1558,7 @@ void DB_OnGetTargetClientMutes(Database db, DBResultSet results, const char[] er
 		MuteType muteType = GetMuteType(text, voice);
 		
 		int client = GetClientBySteamID(clientSteamID);
-		if(client == -1) {
+		if (client == -1) {
 			continue;
 		}
 		
@@ -1582,18 +1567,8 @@ void DB_OnGetTargetClientMutes(Database db, DBResultSet results, const char[] er
 }
 
 public void OnClientDisconnect(int client) {
-	if(IsFakeClient(client)) {
+	if (IsFakeClient(client)) {
 		return;
-	}
-	
-	if(g_PlayerData[client].steamID[0]) {
-		/* Update client data in sql */
-		char query[256];
-		FormatEx(query, sizeof(query), "UPDATE `clients_data` SET `mute_type`=%d, `mute_duration`=%d WHERE `client_steamid`='%s'",
-										view_as<int>(g_PlayerData[client].muteType), view_as<int>(g_PlayerData[client].muteDuration),
-										g_PlayerData[client].steamID);
-										
-		g_hDB.Query(DB_OnUpdateData, query);
 	}
 	
 	g_PlayerData[client].Reset();
@@ -1607,7 +1582,7 @@ public void OnClientDisconnect(int client) {
 		SetIgnored(i, client, false);
 		SetIgnored(client, i, false);
 		
-		if(IsClientConnected(i)) {
+		if (IsClientConnected(i)) {
 			SetListenOverride(i, client, Listen_Yes);
 			SetListenOverride(client, i, Listen_Yes);
 		}
@@ -1616,25 +1591,19 @@ public void OnClientDisconnect(int client) {
 	UpdateIgnored();
 }
 
-void DB_OnUpdateData(Database db, DBResultSet results, const char[] error, any data) {
-	if(error[0]) {
-		LogError("[SM] Error while updating client data, error: %s", error);
-	}
-}
-
 public void CookieMenu_Handler(int client, CookieMenuAction action, any info, char[] buffer, int maxlen)
 {
-	if(action == CookieMenuAction_DisplayOption) {
+	if (action == CookieMenuAction_DisplayOption) {
 		Format(buffer, maxlen, "Self-Mute Settings");
 	}
 	
-	if(action == CookieMenuAction_SelectOption) {
+	if (action == CookieMenuAction_SelectOption) {
 		ShowCookiesMenu(client);
 	}
 }
 
 void UpdateIgnored() {
-	if(g_Plugin_ccc)
+	if (g_Plugin_ccc)
 		CCC_UpdateIgnoredArray(g_Ignored);
 }
 
@@ -1647,7 +1616,7 @@ void SetIgnored(int client, int target, bool ignored) {
 }
 
 void ApplySelfMute(int client, int target, MuteType muteType) {
-	if(!g_cvMuteAdmins.BoolValue && IsClientAdmin(target)) {
+	if (!g_cvMuteAdmins.BoolValue && IsClientAdmin(target)) {
 		CPrintToChat(client, "You cannot self-mute an admin!");
 		return;
 	}
@@ -1698,13 +1667,13 @@ void ApplySelfMuteGroup(int client, const char[] groupFilterC, MuteType muteType
 }
 
 void ApplySelfUnMute(int client, int target) {
-	if(g_bClientText[client][target]) {
+	if (g_bClientText[client][target]) {
 		SetIgnored(client, target, false);
 		UpdateIgnored();
 		g_bClientText[client][target] = false;
 	}
 	
-	if(g_bClientVoice[client][target]) {
+	if (g_bClientVoice[client][target]) {
 		SetListenOverride(client, target, Listen_Yes);
 		g_bClientVoice[client][target] = false;
 	}
@@ -1714,9 +1683,9 @@ void ApplySelfUnMute(int client, int target) {
 
 void ApplySelfUnMuteGroup(int client, GroupFilter groupFilter) {
 	int target = view_as<int>(groupFilter);
-	if(g_bClientGroupText[client][target]) {
+	if (g_bClientGroupText[client][target]) {
 		for (int i = 1; i <= MaxClients; i++) {
-			if(!IsClientInGame(i) || g_bClientText[client][i] || !IsClientInGroup(i, groupFilter)) {
+			if (!IsClientInGame(i) || g_bClientText[client][i] || !IsClientInGroup(i, groupFilter)) {
 				continue;
 			}	
 			
@@ -1726,9 +1695,9 @@ void ApplySelfUnMuteGroup(int client, GroupFilter groupFilter) {
 		UpdateIgnored();
 	}
 	
-	if(g_bClientGroupVoice[client][target]) {
+	if (g_bClientGroupVoice[client][target]) {
 		for (int i = 1; i <= MaxClients; i++) {
-			if(!IsClientInGame(i) || g_bClientVoice[client][i] || !IsClientInGroup(i, groupFilter)) {
+			if (!IsClientInGame(i) || g_bClientVoice[client][i] || !IsClientInGroup(i, groupFilter)) {
 				continue;
 			}	
 			
@@ -1742,7 +1711,7 @@ void ApplySelfUnMuteGroup(int client, GroupFilter groupFilter) {
 	SelfUnMutePreviousGroup(client);
 	
 	for (int i = 0; i < view_as<int>(GROUP_MAX_NUM); i++) {
-		if(g_bClientGroupText[client][i] || g_bClientGroupVoice[client][i]) {
+		if (g_bClientGroupText[client][i] || g_bClientGroupVoice[client][i]) {
 			UpdateSelfMuteGroup(client, view_as<GroupFilter>(i));
 		}
 	}
@@ -1751,7 +1720,7 @@ void ApplySelfUnMuteGroup(int client, GroupFilter groupFilter) {
 }
 
 void DeleteMuteFromDatabase(int client, const char[] id, MuteTarget muteTarget) {
-	if(!IsThisMutedPerma(client, id, muteTarget, true)) {
+	if (!IsThisMutedPerma(client, id, muteTarget, true)) {
 		return;
 	}
 	
@@ -1766,21 +1735,21 @@ void DeleteMuteFromDatabase(int client, const char[] id, MuteTarget muteTarget) 
 }
 
 void DB_OnRemove(Database db, DBResultSet results, const char[] error, any data) {
-	if(!results || error[0]) {
+	if (!results || error[0]) {
 		LogError("[Self-Mute] Could not delete mute from database, error: %s", error);
 	}
 }
 
 bool IsThisMutedPerma(int client, const char[] id, MuteTarget muteTarget, bool remove = false) {
-	if(!g_PlayerData[client].mutesList) {
+	if (!g_PlayerData[client].mutesList) {
 		return false;
 	}
 	
 	for (int i = 0; i < g_PlayerData[client].mutesList.Length; i++) {
 		SelfMute selfMute;
 		g_PlayerData[client].mutesList.GetArray(i, selfMute, sizeof(selfMute));
-		if(strcmp(id, selfMute.id) == 0 && muteTarget == selfMute.muteTarget) {
-			if(remove) {
+		if (strcmp(id, selfMute.id) == 0 && muteTarget == selfMute.muteTarget) {
+			if (remove) {
 				g_PlayerData[client].mutesList.Erase(i);
 			}
 			
@@ -1797,7 +1766,7 @@ void SaveSelfMuteClient(int client, int target) {
 	char targetName[sizeof(PlayerData::name) * 2 + 1];
 	char targetSteamID[sizeof(PlayerData::steamID) * 2 + 1];
 	
-	if(!g_hDB.Escape(g_PlayerData[client].name, clientName, sizeof(clientName))
+	if (!g_hDB.Escape(g_PlayerData[client].name, clientName, sizeof(clientName))
 		|| !g_hDB.Escape(g_PlayerData[client].steamID, clientSteamID, sizeof(clientSteamID))
 		|| !g_hDB.Escape(g_PlayerData[target].name, targetName, sizeof(targetName))
 		|| !g_hDB.Escape(g_PlayerData[target].steamID, targetSteamID, sizeof(targetSteamID))) {
@@ -1805,15 +1774,23 @@ void SaveSelfMuteClient(int client, int target) {
 	}
 	
 	char query[512];
-	FormatEx(query, sizeof(query), "INSERT INTO `clients_mute` (`client_name`, `client_steamid`, `target_name`, `target_steamid`,"
-									... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
-									... "ON DUPLICATE KEY UPDATE `client_name`='%s', `target_name`='%s', `text_chat`=%d, `voice_chat`=%d",
-									clientName, clientSteamID, targetName,
-									targetSteamID, view_as<int>(g_bClientText[client][target]),
-									view_as<int>(g_bClientVoice[client][target]), 
-									clientName, targetName,
-									view_as<int>(g_bClientText[client][target]),
-									view_as<int>(g_bClientVoice[client][target]));
+	if (!g_bSQLLite) {
+		FormatEx(query, sizeof(query), "INSERT INTO `clients_mute` (`client_name`, `client_steamid`, `target_name`, `target_steamid`,"
+										... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
+										... "ON DUPLICATE KEY UPDATE `client_name`='%s', `target_name`='%s', `text_chat`=%d, `voice_chat`=%d",
+										clientName, clientSteamID, targetName,
+										targetSteamID, view_as<int>(g_bClientText[client][target]),
+										view_as<int>(g_bClientVoice[client][target]), 
+										clientName, targetName,
+										view_as<int>(g_bClientText[client][target]),
+										view_as<int>(g_bClientVoice[client][target]));
+	} else {
+		FormatEx(query, sizeof(query), "REPLACE INTO `clients_mute` (`client_name`, `client_steamid`, `target_name`, `target_steamid`,"
+										... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)",
+										clientName, clientSteamID, targetName,
+										targetSteamID, view_as<int>(g_bClientText[client][target]),
+										view_as<int>(g_bClientVoice[client][target]));
+	}
 									
 	g_hDB.Query(DB_OnInsertData, query);
 	
@@ -1831,22 +1808,30 @@ void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 	char groupName[32 * 2 + 1];
 	char groupFilterC[20 * 2 + 1];
 	
-	if(!g_hDB.Escape(g_PlayerData[client].name, clientName, sizeof(clientName))
+	if (!g_hDB.Escape(g_PlayerData[client].name, clientName, sizeof(clientName))
 		|| !g_hDB.Escape(g_PlayerData[client].steamID, clientSteamID, sizeof(clientSteamID))
 		|| !g_hDB.Escape(g_sGroupsNames[view_as<int>(groupFilter)], groupName, sizeof(groupName))
 		|| !g_hDB.Escape(g_sGroupsFilters[view_as<int>(groupFilter)], groupFilterC, sizeof(groupFilterC))) {
 		return;
 	}
 	char query[512];
-	FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
-									... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
-									... "ON DUPLICATE KEY UPDATE `client_name`='%s', `text_chat`=%d, `voice_chat`=%d",
-									clientName, clientSteamID, groupName,
-									groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
-									view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]), 
-									clientName,
-									view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
-									view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
+	if (!g_bSQLLite) {
+		FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
+										... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
+										... "ON DUPLICATE KEY UPDATE `client_name`='%s', `text_chat`=%d, `voice_chat`=%d",
+										clientName, clientSteamID, groupName,
+										groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
+										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]), 
+										clientName,
+										view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
+										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
+	} else {
+		FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
+										... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)",
+										clientName, clientSteamID, groupName,
+										groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
+										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
+	}
 									
 	g_hDB.Query(DB_OnInsertData, query);
 	
@@ -1859,8 +1844,73 @@ void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 }
 
 void DB_OnInsertData(Database db, DBResultSet results, const char[] error, any data) {
-	if(!results || error[0]) {
+	if (!results || error[0]) {
 		LogError("[Self-Mute] Could not insert data into the database, error: %s", error);
+	}
+}
+
+void DB_UpdateClientData(int client, int mode) {
+	if (g_hDB == null) {
+		return;
+	}
+	
+	if (!g_PlayerData[client].addedToDB) {
+		char steamIDEscaped[sizeof(PlayerData::steamID) * 2 + 1];
+		if (!g_hDB.Escape(g_PlayerData[client].steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
+			return;
+		}
+		
+		char query[120];
+		FormatEx(query, sizeof(query), "INSERT INTO `clients_data` ("
+										... "`client_steamid`, `mute_type`, `mute_duration`)"
+										... "VALUES ('%s', %d, %d)", steamIDEscaped, view_as<int>(g_PlayerData[client].muteType), view_as<int>(g_PlayerData[client].muteDuration));
+		g_hDB.Query(DB_OnAddData, query);
+		
+		DataPack pack = new DataPack();
+		pack.WriteCell(GetClientUserId(client));
+		pack.WriteCell(mode);
+		CreateTimer(1.0, UpdateClientData_Timer, pack);
+		return;
+	}
+	
+	if (g_PlayerData[client].steamID[0]) {
+		/* Update client data in sql */
+		char query[256];
+		FormatEx(query, sizeof(query), "UPDATE `clients_data` SET `%s`=%d WHERE `client_steamid`='%s'",
+										(mode == 0) ? "mute_type" : "mute_duration", 
+										(mode == 0) ? view_as<int>(g_PlayerData[client].muteType) : view_as<int>(g_PlayerData[client].muteDuration),
+										g_PlayerData[client].steamID);
+										
+		g_hDB.Query(DB_OnUpdateData, query);
+	}
+}
+
+Action UpdateClientData_Timer(Handle timer, DataPack pack) {
+	pack.Reset();
+	
+	int client = GetClientOfUserId(pack.ReadCell());
+	if (!client) {
+		delete pack;
+		return Plugin_Stop;
+	}
+	
+	int mode = pack.ReadCell();
+	DB_UpdateClientData(client, mode);
+	
+	delete pack;
+	return Plugin_Stop;
+}
+
+void DB_OnAddData(Database db, DBResultSet results, const char[] error, any data) {
+	if (error[0]) {
+		LogError("[Self-Mute] Error while inserting client's data, error: %s", error);
+		return;
+	}
+}
+
+void DB_OnUpdateData(Database db, DBResultSet results, const char[] error, any data) {
+	if (error[0]) {
+		LogError("[SM] Error while updating client data, error: %s", error);
 	}
 }
 
@@ -1869,11 +1919,11 @@ bool IsClientAdmin(int client) {
 }
 
 MuteType GetMuteType(bool text, bool voice) {
-	if(text && voice) {
+	if (text && voice) {
 		return MuteType_All;
-	} else if(text && !voice) {
+	} else if (text && !voice) {
 		return MuteType_Text;
-	} else if(!text && voice) {
+	} else if (!text && voice) {
 		return MuteType_Voice;
 	}
 	
@@ -1882,7 +1932,7 @@ MuteType GetMuteType(bool text, bool voice) {
 
 GroupFilter GetGroupFilterByChar(const char[] groupFilterC) {
 	for (int i = 0; i < sizeof(g_sGroupsFilters); i++) {
-		if(strcmp(g_sGroupsFilters[i], groupFilterC) == 0) {
+		if (strcmp(g_sGroupsFilters[i], groupFilterC) == 0) {
 			return view_as<GroupFilter>(i);
 		}
 	}
@@ -1893,25 +1943,25 @@ GroupFilter GetGroupFilterByChar(const char[] groupFilterC) {
 void SelfUnMutePreviousGroup(int client) {
 	bool shouldUpdateIgnored;
 	for (int i = 1; i <= MaxClients; i++) {
-		if(i == client) {
+		if (i == client) {
 			continue;
 		}
 		
-		if(!IsClientConnected(i)) {
+		if (!IsClientConnected(i)) {
 			continue;
 		}
 		
-		if(GetIgnored(client, i) && !g_bClientText[client][i]) {
+		if (GetIgnored(client, i) && !g_bClientText[client][i]) {
 			shouldUpdateIgnored = true;
 			SetIgnored(client, i, false);
 		}
 		
-		if(GetListenOverride(client, i) == Listen_No && !g_bClientVoice[client][i]) {
+		if (GetListenOverride(client, i) == Listen_No && !g_bClientVoice[client][i]) {
 			SetListenOverride(client, i, Listen_Yes);
 		}
 	}
 	
-	if(shouldUpdateIgnored) {
+	if (shouldUpdateIgnored) {
 		UpdateIgnored();
 	}
 }
@@ -1919,33 +1969,33 @@ void SelfUnMutePreviousGroup(int client) {
 void UpdateSelfMuteGroup(int client, GroupFilter groupFilter) {
 	bool shouldUpdateIgnored;
 	for (int i = 1; i <= MaxClients; i++) {
-		if(i == client) {
+		if (i == client) {
 			continue;
 		}
 		
-		if(!IsClientConnected(i)) {
+		if (!IsClientConnected(i)) {
 			continue;
 		}
 		
-		if(!g_cvMuteAdmins.BoolValue && IsClientAdmin(i)) {
+		if (!g_cvMuteAdmins.BoolValue && IsClientAdmin(i)) {
 			continue;
 		}
 		
-		if(!IsClientInGroup(i, groupFilter)) {
+		if (!IsClientInGroup(i, groupFilter)) {
 			continue;
 		}
 		
-		if(g_bClientGroupText[client][view_as<int>(groupFilter)]) {
+		if (g_bClientGroupText[client][view_as<int>(groupFilter)]) {
 			shouldUpdateIgnored = true;
 			SetIgnored(client, i, true);
 		}
 		
-		if(g_bClientGroupVoice[client][view_as<int>(groupFilter)]) {
+		if (g_bClientGroupVoice[client][view_as<int>(groupFilter)]) {
 			SetListenOverride(client, i, Listen_No);
 		}
 	}
 	
-	if(shouldUpdateIgnored) {
+	if (shouldUpdateIgnored) {
 		UpdateIgnored();
 	}
 }
@@ -1955,7 +2005,7 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		return false;
 	}
 
-	if(!IsClientInGame(client)) {
+	if (!IsClientInGame(client)) {
 		return false;
 	}
 			
@@ -1966,12 +2016,12 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 		
 		case GROUP_CTS: {
-			if(g_Plugin_zombiereloaded) {
-				if(!IsPlayerAlive(client) || !ZR_IsClientHuman(client)) {
+			if (g_Plugin_zombiereloaded) {
+				if (!IsPlayerAlive(client) || !ZR_IsClientHuman(client)) {
 					return false;
 				}
 			} else {
-				if(team != CS_TEAM_CT) {
+				if (team != CS_TEAM_CT) {
 					return false;
 				}
 			}
@@ -1980,12 +2030,12 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 	
 		case GROUP_TS: {
-			if(g_Plugin_zombiereloaded) {
-				if(!IsPlayerAlive(client) || !ZR_IsClientZombie(client)) {
+			if (g_Plugin_zombiereloaded) {
+				if (!IsPlayerAlive(client) || !ZR_IsClientZombie(client)) {
 					return false;
 				}
 			} else {
-				if(team != CS_TEAM_T) {
+				if (team != CS_TEAM_T) {
 					return false;
 				}
 			}
@@ -1994,7 +2044,7 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 		
 		case GROUP_SPECTATORS: {
-			if(team != CS_TEAM_SPECTATOR || team != CS_TEAM_NONE) {
+			if (team != CS_TEAM_SPECTATOR || team != CS_TEAM_NONE) {
 				return false;
 			}
 			
@@ -2006,20 +2056,20 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 }
 
 int GetClientBySteamID(const char[] steamID) {
-	for(int i = 1; i <= MaxClients; i++) {
-		if(!IsClientInGame(i)) {
+	for (int i = 1; i <= MaxClients; i++) {
+		if (!IsClientInGame(i)) {
 			continue;
 		}
 
-		if(IsClientSourceTV(i) && strcmp("Console", steamID) == 0) {
+		if (IsClientSourceTV(i) && strcmp("Console", steamID) == 0) {
 			return i;
 		}
 		
-		if(IsFakeClient(i)) {
+		if (IsFakeClient(i)) {
 			continue;
 		}
 		
-		if(strcmp(g_PlayerData[i].steamID, steamID, false) == 0) {
+		if (strcmp(g_PlayerData[i].steamID, steamID, false) == 0) {
 			return i;
 		}
 	}
@@ -2040,7 +2090,7 @@ int g_MsgPlayersNum;
 int g_MsgPlayers[MAXPLAYERS + 1];
 
 public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle bf, const int[] players, int playersNum, bool reliable, bool init) {
-	if(g_bIsProtoBuf) {
+	if (g_bIsProtoBuf) {
 		g_MsgDest = PbReadInt(bf, "msg_dst");
 		g_MsgClient = PbReadInt(bf, "client");
 		PbReadString(bf, "msg_name", g_MsgName, sizeof(g_MsgName));
@@ -2061,17 +2111,17 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle bf, const int[] p
 
 	// Check which clients need to be excluded.
 	g_MsgPlayersNum = 0;
-	for(int i = 0; i < playersNum; i++) {
+	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
-		if(!(g_bClientText[client][g_MsgClient] || g_bClientVoice[client][g_MsgClient]))
+		if (!(g_bClientText[client][g_MsgClient] || g_bClientVoice[client][g_MsgClient]))
 			g_MsgPlayers[g_MsgPlayersNum++] = client;
 	}
 
 	// No clients were excluded.
-	if(g_MsgPlayersNum == playersNum) {
+	if (g_MsgPlayersNum == playersNum) {
 		g_MsgClient = -1;
 		return Plugin_Continue;
-	} else if(g_MsgPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
+	} else if (g_MsgPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
 		g_MsgClient = -2;
 		return Plugin_Handled;
 	}
@@ -2080,19 +2130,19 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle bf, const int[] p
 }
 
 public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle bf, const int[] players, int playersNum, bool reliable, bool init) {
-	if(g_MsgClient == -1) {
+	if (g_MsgClient == -1) {
 		return Plugin_Continue;
-	} else if(g_MsgClient == -2) {
+	} else if (g_MsgClient == -2) {
 		return Plugin_Handled;
 	}
 
-	if(g_bIsProtoBuf) {
+	if (g_bIsProtoBuf) {
 		PbReadString(bf, "radio_sound", g_MsgRadioSound, sizeof(g_MsgRadioSound));
 	} else {
 		BfReadString(bf, g_MsgRadioSound, sizeof(g_MsgRadioSound), false);
 	}
 	
-	if(strcmp(g_MsgRadioSound, "radio.locknload") == 0) {
+	if (strcmp(g_MsgRadioSound, "radio.locknload") == 0) {
 		return Plugin_Continue;
 	}
 
@@ -2107,7 +2157,7 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle bf, const int[] p
 	pack.WriteString(g_MsgRadioSound);
 	pack.WriteCell(g_MsgPlayersNum);
 
-	for(int i = 0; i < g_MsgPlayersNum; i++) {
+	for (int i = 0; i < g_MsgPlayersNum; i++) {
 		pack.WriteCell(g_MsgPlayers[i]);
 	}
 	
@@ -2130,9 +2180,9 @@ public void OnPlayerRadio(DataPack pack)
 	g_MsgPlayersNum = pack.ReadCell();
 
 	int playersNum = 0;
-	for(int i = 0; i < g_MsgPlayersNum; i++) {
+	for (int i = 0; i < g_MsgPlayersNum; i++) {
 		int client_ = pack.ReadCell();
-		if(IsClientInGame(client_)) {
+		if (IsClientInGame(client_)) {
 			g_MsgPlayers[playersNum++] = client_;
 		}
 	}
@@ -2140,7 +2190,7 @@ public void OnPlayerRadio(DataPack pack)
 	delete pack;
 
 	Handle RadioText = StartMessage("RadioText", g_MsgPlayers, playersNum, USERMSG_RELIABLE);
-	if(g_bIsProtoBuf) {
+	if (g_bIsProtoBuf) {
 		PbSetInt(RadioText, "msg_dst", g_MsgDest);
 		PbSetInt(RadioText, "client", g_MsgClient);
 		PbSetString(RadioText, "msg_name", g_MsgName);
@@ -2161,7 +2211,7 @@ public void OnPlayerRadio(DataPack pack)
 	EndMessage();
 
 	Handle SendAudio = StartMessage("SendAudio", g_MsgPlayers, playersNum, USERMSG_RELIABLE);
-	if(g_bIsProtoBuf) {
+	if (g_bIsProtoBuf) {
 		PbSetString(SendAudio, "radio_sound", g_MsgRadioSound);
 	} else {
 		BfWriteString(SendAudio, g_MsgRadioSound);
