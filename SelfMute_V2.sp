@@ -1866,6 +1866,8 @@ void DB_UpdateClientData(int client, int mode) {
 										... "VALUES ('%s', %d, %d)", steamIDEscaped, view_as<int>(g_PlayerData[client].muteType), view_as<int>(g_PlayerData[client].muteDuration));
 		g_hDB.Query(DB_OnAddData, query);
 		
+		g_PlayerData[client].addedToDB = true;
+		
 		DataPack pack = new DataPack();
 		pack.WriteCell(GetClientUserId(client));
 		pack.WriteCell(mode);
