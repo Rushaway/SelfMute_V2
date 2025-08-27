@@ -1463,7 +1463,8 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 				... "UNION ALL "
 				... "SELECT \"\" AS `tar_name`, `client_steamid` AS `target_steamid`,"
 				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
-				... "FROM `clients_mute` WHERE `target_steamid`='%s'"
+				... "FROM `clients_mute` WHERE `target_steamid`='%s'",
+				steamIDEscaped, steamIDEscaped, steamIDEscaped
 	);
 	
 	g_hDB.Query(DB_OnGetClientTargets, query, userid);
