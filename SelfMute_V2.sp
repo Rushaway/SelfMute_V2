@@ -2046,7 +2046,7 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 		
 		case GROUP_SPECTATORS: {
-			if (team != CS_TEAM_SPECTATOR || team != CS_TEAM_NONE) {
+			if (team != CS_TEAM_SPECTATOR && team != CS_TEAM_NONE) {
 				return false;
 			}
 			
