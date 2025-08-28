@@ -10,6 +10,7 @@
 #undef REQUIRE_PLUGIN
 #tryinclude <zombiereloaded>
 #tryinclude <Voice>
+#tryinclude <PlayerManager>
 #define REQUIRE_PLUGIN
 
 /* If your server doesn't have zombiereloaded but you have the zombiereloaded include file, then uncomment this: */
@@ -80,11 +81,8 @@ enum GroupFilter {
 	GROUP_CTS = 1,
 	GROUP_TS = 2,
 	GROUP_SPECTATORS = 3,
-	GROUP_FRENCHIES = 4,
-	GROUP_GAYS = 5,
-	GROUP_DICKSUCKERS = 6,
-	GROUP_MAKOFAGS = 7,
-	GROUP_MAX_NUM = 8
+	GROUP_NOSTEAM = 4,
+	GROUP_MAX_NUM = 5
 };
 
 char g_sGroupsNames[][] = {
@@ -97,10 +95,7 @@ char g_sGroupsNames[][] = {
 	"Terrorists",
 #endif
 	"Spectators",
-	"French faggots",
-	"Gay fuckers",
-	"Dick Suckers",
-	"Mako Fags"
+	"No-Steam Players"
 };
 
 char g_sGroupsFilters[][] = {
@@ -108,10 +103,7 @@ char g_sGroupsFilters[][] = {
 	"@cts",
 	"@ts",
 	"@spectators",
-	"@frenchies",
-	"@gays",
-	"@dicksuckers",
-	"@makofags"
+	"@nosteam"
 };
 
 enum struct PlayerData {
@@ -2073,6 +2065,16 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 			}
 			
 			return true;
+		}
+		
+		case GROUP_NOSTEAM: {
+			#if defined _PlayerManager_included
+			if (!PM_IsPlayerSteam(client)) {
+				return true;
+			}
+			#endif
+			
+			return false;
 		}
 		
 		default: {
