@@ -1494,8 +1494,8 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		
 		bool isGroup = !results.IsFieldNull(1);
 		
-		bool text = view_as<bool>(results.FetchInt(2));
-		bool voice = view_as<bool>(results.FetchInt(3));
+		bool text = view_as<bool>(results.FetchInt(3));
+		bool voice = view_as<bool>(results.FetchInt(4));
 		MuteType muteType = GetMuteType(text, voice);
 		
 		if (!isGroup) {
@@ -1517,7 +1517,7 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 			}
 		} else {
 			char groupFilter[20];
-			results.FetchString(1, groupFilter, sizeof(groupFilter));
+			results.FetchString(2, groupFilter, sizeof(groupFilter));
 			
 			SelfMute myMute;
 			myMute.AddMute(targetName, groupFilter, muteType, MuteTarget_Group);
