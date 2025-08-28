@@ -80,7 +80,11 @@ enum GroupFilter {
 	GROUP_CTS = 1,
 	GROUP_TS = 2,
 	GROUP_SPECTATORS = 3,
-	GROUP_MAX_NUM = 4
+	GROUP_FRENCHIES = 4,
+	GROUP_GAYS = 5,
+	GROUP_DICKSUCKERS = 6,
+	GROUP_MAKOFAGS = 7,
+	GROUP_MAX_NUM = 8
 };
 
 char g_sGroupsNames[][] = {
@@ -92,14 +96,22 @@ char g_sGroupsNames[][] = {
 	"Counter Terrorists",
 	"Terrorists",
 #endif
-	"Spectators"
+	"Spectators",
+	"French faggots",
+	"Gay fuckers",
+	"Dick Suckers",
+	"Mako Fags"
 };
 
 char g_sGroupsFilters[][] = {
 	"@all",
 	"@cts",
 	"@ts",
-	"@spectators"
+	"@spectators",
+	"@frenchies",
+	"@gays",
+	"@dicksuckers",
+	"@makofags"
 };
 
 enum struct PlayerData {
@@ -2061,6 +2073,10 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 				return false;
 			}
 			
+			return true;
+		}
+		
+		default: {
 			return true;
 		}
 	}
