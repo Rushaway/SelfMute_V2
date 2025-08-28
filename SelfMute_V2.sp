@@ -796,7 +796,7 @@ int Menu_ShowSelfMuteSpecificTargets(Menu menu, MenuAction action, int param1, i
 void HandleGroupSelfUnMute(int client, const char[] groupFilterC) {
 	GroupFilter groupFilter = GROUP_MAX_NUM;
 	for (int i = 0; i < sizeof(g_sGroupsFilters); i++) {
-		if (strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0) {
+		if (strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0 || StrContains(groupFilterC, g_sGroupsFilters[i], false) != -1) {
 			groupFilter = view_as<GroupFilter>(i);
 			break;
 		}
@@ -839,7 +839,7 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 	PrintToChatAll("Group to selfmute: %s", groupFilterC);
 	for (int i = 0; i < sizeof(g_sGroupsFilters); i++) {
 		PrintToChatAll("Found Group Filter: %s", g_sGroupsFilters[i]);
-		if (strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0) {
+		if (strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0 || StrContains(groupFilterC, g_sGroupsFilters[i], false) != -1) {
 			groupFilter = view_as<GroupFilter>(i);
 			break;
 		}
