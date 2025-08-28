@@ -2007,7 +2007,7 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 	}
 
-	return true;
+	return false;
 }
 
 int GetClientBySteamID(const char[] steamID) {
