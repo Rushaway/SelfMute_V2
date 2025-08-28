@@ -1313,7 +1313,8 @@ void DB_Tables() {
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_steamid` varchar(20) NOT NULL," 
 												... "`mute_type` int(2) NOT NULL,"
-												... "`mute_duration` int(2) NOT NULL)");
+												... "`mute_duration` int(2) NOT NULL,"
+												... "UNIQUE KEY(`client_steamid`))");
 																						
 		T_sqliteTables.AddQuery(query0);
 		
@@ -2007,7 +2008,7 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 	}
 
-	return false;
+	return true;
 }
 
 int GetClientBySteamID(const char[] steamID) {
