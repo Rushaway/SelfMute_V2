@@ -1426,7 +1426,7 @@ public void OnClientPostAdminCheck(int client) {
 }
 
 void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, int userid) {
-	if (results == null || error[0]) {
+	if (error[0]) {
 		LogError("[Self-Mute] Could not revert client data, error: %s", error);
 		return;
 	}
