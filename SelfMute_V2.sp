@@ -847,9 +847,7 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 	#endif
 
 	GroupFilter groupFilter = GROUP_MAX_NUM;
-	CPrintToChatAll("Group to selfmute: %s", groupFilterC);
 	for (int i = 0; i < sizeof(g_sGroupsFilters); i++) {
-		CPrintToChatAll("Found Group Filter: %s", g_sGroupsFilters[i]);
 		if (strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0 || StrContains(g_sGroupsFilters[i], groupFilterC, false) != -1) {
 			groupFilter = view_as<GroupFilter>(i);
 			break;
@@ -1513,10 +1511,7 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		return;
 	}
 
-	CPrintToChatAll("DB_OnGetClientTargets callback");
-
 	while(results.FetchRow()) {
-		CPrintToChatAll("Found row");
 
 		bool isGroup = results.IsFieldNull(1);
 
@@ -1528,14 +1523,11 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 			char targetName[32];
 			results.FetchString(0, targetName, sizeof(targetName));
 
-			CPrintToChatAll("Mute is NOT group");
 			char steamIDStr[20];
 			IntToString(results.FetchInt(1), steamIDStr, sizeof(steamIDStr));
 
-			CPrintToChatAll("Mute Data: \nclient: %N\ntarget steamID: %s", desiredClient, steamIDStr);
 			int target = GetClientBySteamID(steamIDStr);
 			if (target == -1) {
-				CPrintToChatAll("Target is -1, stemaID: %s", steamIDStr);
 				continue;
 			}
 
@@ -1546,10 +1538,8 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 				myMute.AddMute(targetName, steamIDStr, muteType, MuteTarget_Client);
 				g_PlayerData[desiredClient].mutesList.PushArray(myMute);
 				ApplySelfMute(desiredClient, target, muteType);
-				CPrintToChatAll("Applying selfmute...");
 			}
 		} else {
-			CPrintToChatAll("Mute is GROUP");
 			char groupFilter[20];
 			results.FetchString(2, groupFilter, sizeof(groupFilter));
 
