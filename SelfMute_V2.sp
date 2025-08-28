@@ -1505,24 +1505,39 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		MuteType muteType = GetMuteType(text, voice);
 
 		if (!isGroup) {
+			int targetSteamID = results.FetchInt(0);
 			char steamIDStr[20];
-			IntToString(results.FetchInt(0), steamIDStr, sizeof(steamIDStr));
 
-			int target = GetClientBySteamID(steamIDStr);
-			if (target == -1) {
-				continue;
+			// Special handling for SourceTV (SteamID = 0)
+			if (targetSteamID == 0) {
+				for (int i = 1; i <= MaxClients; i++) {
+					if (IsClientSourceTV(i)) {
+						SelfMute myMute;
+						myMute.AddMute(g_PlayerData[i].name, "Console", muteType, MuteTarget_Client);
+						g_PlayerData[desiredClient].mutesList.PushArray(myMute);
+						ApplySelfMute(desiredClient, i, muteType);
+						break;
+					}
+				}
+			} else {
+				IntToString(targetSteamID, steamIDStr, sizeof(steamIDStr));
+
+				int target = GetClientBySteamID(steamIDStr);
+				if (target == -1) {
+					continue;
+				}
+
+				// Get target name from client data
+				char targetName[32];
+				if (target > 0 && target <= MaxClients) {
+					strcopy(targetName, sizeof(targetName), g_PlayerData[target].name);
+				}
+
+				SelfMute myMute;
+				myMute.AddMute(targetName, steamIDStr, muteType, MuteTarget_Client);
+				g_PlayerData[desiredClient].mutesList.PushArray(myMute);
+				ApplySelfMute(desiredClient, target, muteType);
 			}
-
-			// Get target name from client data
-			char targetName[32];
-			if (target > 0 && target <= MaxClients) {
-				strcopy(targetName, sizeof(targetName), g_PlayerData[target].name);
-			}
-
-			SelfMute myMute;
-			myMute.AddMute(targetName, steamIDStr, muteType, MuteTarget_Client);
-			g_PlayerData[desiredClient].mutesList.PushArray(myMute);
-			ApplySelfMute(desiredClient, target, muteType);
 		} else {
 			char groupFilter[20];
 			results.FetchString(1, groupFilter, sizeof(groupFilter));
@@ -1696,9 +1711,11 @@ void DeleteMuteFromDatabase(int client, const char[] id, MuteTarget muteTarget) 
 
 	char query[256];
 	if (muteTarget == MuteTarget_Client) {
-		int targetSteamID = StringToInt(id);
-		if (!targetSteamID) {
-			return;
+		int targetSteamID;
+		if (strcmp(id, "Console") == 0) {
+			targetSteamID = 0; // SourceTV
+		} else {
+			targetSteamID = StringToInt(id);
 		}
 
 		FormatEx(query, sizeof(query), "DELETE FROM `clients_mute` WHERE `client_steamid`=%d AND `target_steamid`=%d",
@@ -1730,7 +1747,15 @@ bool IsThisMutedPerma(int client, const char[] id, MuteTarget muteTarget, bool r
 	for (int i = 0; i < g_PlayerData[client].mutesList.Length; i++) {
 		SelfMute selfMute;
 		g_PlayerData[client].mutesList.GetArray(i, selfMute, sizeof(selfMute));
-		if (strcmp(id, selfMute.id) == 0 && muteTarget == selfMute.muteTarget) {
+
+		bool isMatch = false;
+		if (strcmp(id, "Console") == 0 && strcmp(selfMute.id, "Console") == 0) {
+			isMatch = true;
+		} else if (strcmp(id, selfMute.id) == 0) {
+			isMatch = true;
+		}
+
+		if (isMatch && muteTarget == selfMute.muteTarget) {
 			if (remove) {
 				g_PlayerData[client].mutesList.Erase(i);
 			}
@@ -1744,9 +1769,15 @@ bool IsThisMutedPerma(int client, const char[] id, MuteTarget muteTarget, bool r
 
 void SaveSelfMuteClient(int client, int target) {
 	int clientSteamID = StringToInt(g_PlayerData[client].steamID);
-	int targetSteamID = StringToInt(g_PlayerData[target].steamID);
 
-	if (!clientSteamID || !targetSteamID) {
+	int targetSteamID;
+	if (IsClientSourceTV(target)) {
+		targetSteamID = 0; // Use 0 for SourceTV
+	} else {
+		targetSteamID = StringToInt(g_PlayerData[target].steamID);
+	}
+
+	if (!clientSteamID) {
 		return;
 	}
 
