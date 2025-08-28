@@ -1695,10 +1695,13 @@ void DeleteMuteFromDatabase(int client, char[] id, MuteTarget muteTarget) {
 		return;
 	}
 	
+	char thisID[20];
+	strcopy(thisID, sizeof(thisID), id);
+	
 	if (muteTarget == MuteTarget_Group) {
 		char tempId[20];
-		strcopy(tempId, sizeof(tempId), id);
-		FormatEx(id, 20, "'%s'", tempId);
+		strcopy(tempId, sizeof(tempId), thisID);
+		FormatEx(thisID, sizeof(thisID), "'%s'", tempId);
 	}
 	
 	char query[124];
@@ -1706,7 +1709,7 @@ void DeleteMuteFromDatabase(int client, char[] id, MuteTarget muteTarget) {
 	(muteTarget == MuteTarget_Client) ? "clients_mute" : "groups_mute",
 	StringToInt(g_PlayerData[client].steamID),
 	(muteTarget == MuteTarget_Client) ? "target_steamid" : "group_filter",
-	id);
+	thisID);
 	
 	g_hDB.Query(DB_OnRemove, query);
 }
