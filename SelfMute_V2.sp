@@ -33,9 +33,6 @@
 bool g_Plugin_ccc;
 bool g_Plugin_zombiereloaded;
 
-/* Late Load */
-bool g_bLate;
-
 /* CCC ignoring variable */
 bool g_Ignored[(MAXPLAYERS + 1) * (MAXPLAYERS + 1)];
 
@@ -52,8 +49,6 @@ bool g_bIsProtoBuf = false;
 bool g_bSQLLite = false;
 
 /* ConVar List */
-ConVar g_cvMuteAdmins;
-ConVar g_cvMuteAdminsPerma;
 ConVar g_cvDefaultMuteTypeSettings;
 ConVar g_cvDefaultMuteDurationSettings;
 
@@ -164,7 +159,6 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 	RegPluginLibrary("SelfMute");
 	CreateNative("SelfMute_GetTextSelfMute", Native_GetTextSelfMute);
 	CreateNative("SelfMute_GetVoiceSelfMute", Native_GetVoiceSelfMute);
-	g_bLate = late;
 	return APLRes_Success;
 }
 
@@ -185,8 +179,6 @@ public void OnPluginStart() {
 	LoadTranslations("common.phrases");
 	
 	/* ConVars */
-	g_cvMuteAdmins 					= CreateConVar("sm_selfmute_mute_admins", "0", "Can mute admins? (0 = Admins can not be muted | 1 = Allow admins to be muted)");
-	g_cvMuteAdminsPerma 			= CreateConVar("sm_selfmute_mute_admins_perm", "0", "Can mute admins permanently ? Dependency: sm_selfmute_mute_admins [0 = Can not | 1 = Can be]");
 	g_cvDefaultMuteTypeSettings 		= CreateConVar("sm_selfmute_default_mute_type", "2", "[0 = Self-Mute Voice only | 1 = Self-Mute Text Only | 2 = Self-Mute Both]");
 	g_cvDefaultMuteDurationSettings = CreateConVar("sm_selfmute_default_mute_duration", "2", "[0 = Temporary, 1 = Permanent, 2 = Ask First]");
 	
@@ -231,15 +223,13 @@ public void OnPluginStart() {
 	HookUserMessage(msgSendAudio, Hook_UserMessageSendAudio, true);
 
 	/* Incase of a late load */
-	if (g_bLate) {
-		for (int i = 1; i <= MaxClients; i++) {
-			if (!IsClientInGame(i)) {
-				continue;
-			}
-			
-			if (IsClientAuthorized(i)) {
-				OnClientPostAdminCheck(i);
-			}
+	for (int i = 1; i <= MaxClients; i++) {
+		if (!IsClientConnected(i)) {
+			continue;
+		}
+		
+		if (IsClientAuthorized(i)) {
+			OnClientPostAdminCheck(i);
 		}
 	}
 }
@@ -450,6 +440,10 @@ void HandleSelfUnMute(int client, int target) {
 	ApplySelfUnMute(client, target);
 	
 	CPrintToChat(client, "You have {green}self-unmuted {olive}%N", target);
+	
+	if (IsClientAdmin(target)) {
+		LogAction(client, target, "%L Removed SelfMute on admin. %L", client, target);
+	}
 }
 
 void OpenSelfMuteMenu(int client) {
@@ -625,11 +619,6 @@ Action Command_SelfMute(int client, int args) {
 	
 	if (target == client) {
 		CReplyToCommand(client, "Silly, you cannot mute yourself!");
-		return Plugin_Handled;
-	}
-
-	if (!g_cvMuteAdmins.BoolValue && IsClientAdmin(target)) {
-		CReplyToCommand(client, "You cannot self-mute an admin.");
 		return Plugin_Handled;
 	}
 	
@@ -895,11 +884,6 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 } 
 
 void HandleClientSelfMute(int client, int target, MuteType muteType, MuteDuration muteDuration) {
-	if (!g_cvMuteAdminsPerma.BoolValue && muteDuration == MuteDuration_Permanent && IsClientAdmin(target)) {
-		CPrintToChat(client, "You cannot self-mute an admin Permanently.");
-		return;
-	}
-	
 	/* we need to check if this client has selfmuted this target before */
 	if ((g_bClientText[client][target] && !g_bClientVoice[client][target]) && (muteType == MuteType_Voice || muteType == MuteType_All)) {
 		bool perma = IsThisMutedPerma(client, g_PlayerData[target].steamID, MuteTarget_Client);
@@ -994,12 +978,19 @@ int Menu_ShowMuteType(Menu menu, MenuAction action, int param1, int param2) {
 void StartSelfMute(int client, int target, MuteType muteType, MuteDuration muteDuration) {
 	switch(muteDuration) {
 		case MuteDuration_Temporary: {
+			if (IsClientAdmin(target)) {
+				PrintToChat(client, "You are using SelfMute on an admin, be careful!", target);
+        		LogAction(client, target, "%L Self-Muted an admin. %L", client, target);
+        	}
+        	
 			ApplySelfMute(client, target, muteType);
 			MuteType muteTypeEx = GetMuteType(g_bClientText[client][target], g_bClientVoice[client][target]);
 			
 			CPrintToChat(client, "You have {green}self-muted {olive}%N\n{default}Voice Chat: {olive}%s\n{default}Text Chat: {olive}%s", target,
 						(muteTypeEx==MuteType_Voice||muteTypeEx==MuteType_All)?"Yes":"No",
 						(muteTypeEx==MuteType_Text||muteTypeEx==MuteType_All)?"Yes":"No");
+						
+			
 		}
 		
 		case MuteDuration_Permanent: {
@@ -1311,6 +1302,7 @@ void DB_Tables() {
 		T_mysqlTables.AddQuery(query0);
 
 		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_both2` ON `groups_mute` (`client_steamid`, `group_filter`)");
+											
 		T_mysqlTables.AddQuery(query0);
 		
 		g_hDB.Execute(T_mysqlTables, DB_mysqlTablesOnSuccess, DB_mysqlTablesOnError, _, DBPrio_High);
@@ -1596,11 +1588,6 @@ void SetIgnored(int client, int target, bool ignored) {
 }
 
 void ApplySelfMute(int client, int target, MuteType muteType) {
-	if (!g_cvMuteAdmins.BoolValue && IsClientAdmin(target)) {
-		CPrintToChat(client, "You cannot self-mute an admin!");
-		return;
-	}
-	
 	switch(muteType) {
 		case MuteType_Text: {
 			SetIgnored(client, target, true);
@@ -1988,10 +1975,6 @@ void UpdateSelfMuteGroup(int client, GroupFilter groupFilter) {
 		}
 		
 		if (!IsClientConnected(i)) {
-			continue;
-		}
-		
-		if (!g_cvMuteAdmins.BoolValue && IsClientAdmin(i)) {
 			continue;
 		}
 		
