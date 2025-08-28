@@ -1,3 +1,4 @@
+
 #pragma semicolon 1
 
 #include <sourcemod>
@@ -1814,9 +1815,25 @@ void DB_UpdateClientData(int client, int mode) {
 		}
 		
 		char query[120];
-		FormatEx(query, sizeof(query), "INSERT INTO `clients_data` ("
-										... "`client_steamid`, `mute_type`, `mute_duration`)"
-										... "VALUES ('%s', %d, %d)", steamIDEscaped, view_as<int>(g_PlayerData[client].muteType), view_as<int>(g_PlayerData[client].muteDuration));
+		if (!g_bSQLLite) {
+			FormatEx(query, sizeof(query), "INSERT INTO `clients_data` ("
+											... "`client_steamid`, `mute_type`, `mute_duration`)"
+											... "VALUES ('%s', %d, %d) "
+											... "ON DUPLICATE KEY UPDATE `mute_type`=%d, `mute_duration`=%d", 
+											steamIDEscaped, 
+											view_as<int>(g_PlayerData[client].muteType), 
+											view_as<int>(g_PlayerData[client].muteDuration),
+											view_as<int>(g_PlayerData[client].muteType), 
+											view_as<int>(g_PlayerData[client].muteDuration));
+		} else {
+			FormatEx(query, sizeof(query), "REPLACE INTO `clients_data` ("
+											... "`client_steamid`, `mute_type`, `mute_duration`)"
+											... "VALUES ('%s', %d, %d)",
+											steamIDEscaped, 
+											view_as<int>(g_PlayerData[client].muteType), 
+											view_as<int>(g_PlayerData[client].muteDuration));
+		}
+		
 		g_hDB.Query(DB_OnAddData, query);
 		
 		g_PlayerData[client].addedToDB = true;
