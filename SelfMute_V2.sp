@@ -2072,7 +2072,7 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		
 		case GROUP_NOSTEAM: {
 			#if defined _PlayerManager_included
-			if (!PM_IsPlayerSteam(client)) {
+			if (!IsFakeClient(client) && !PM_IsPlayerSteam(client)) {
 				return true;
 			}
 			#endif
@@ -2082,7 +2082,7 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		
 		case GROUP_STEAM: {
 			#if defined _PlayerManager_included
-			if (PM_IsPlayerSteam(client)) {
+			if (!IsFakeClient(client) && PM_IsPlayerSteam(client)) {
 				return true;
 			}
 			#endif
