@@ -1433,7 +1433,7 @@ public void OnClientPostAdminCheck(int client) {
 
 	char query[1024];
 	FormatEx(query, sizeof(query), "SELECT `mute_type`,`mute_duration` FROM `clients_data` WHERE `client_steamid`=%d", steamID);
-	g_hDB.Query(DB_OnGetClientData, query, GetClientUserId(client));
+	g_hDB.Query(DB_OnGetClientData, query, GetClientUserId(client), DBPrio_Normal);
 }
 
 void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, int userid) {
@@ -1456,12 +1456,14 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 		g_PlayerData[client].muteDuration = view_as<MuteDuration>(results.FetchInt(1));
 	}
 
-	/* Now get mute list duh, get both the client as a client and as a target */
-	/* We will select 4 fields of each table, though not all fields are required, NULL will be given */
-	/* 0. `tar_id`			-> Target (player) steamID (int) */
-	/* 1. `grp_id`			-> Group Filter char (string) */
-	/* 2. `text_chat`		-> Target (player & group) Text Chat Status (tinyint or int(2)) */
-	/* 3. `voice_chat`		-> Target (player & group) Voice Chat Status (tinyint or int(2)) */
+	/*
+     * Now get mute list duh, get both the client as a client and as a target
+	 * We will select 4 fields of each table, though not all fields are required, NULL will be given
+	 * 0. `tar_id`			-> Target (player) steamID (int)
+	 * 1. `grp_id`			-> Group Filter char (string)
+	 * 2. `text_chat`		-> Target (player & group) Text Chat Status (tinyint or int(2))
+	 * 3. `voice_chat`		-> Target (player & group) Voice Chat Status (tinyint or int(2))
+	 */
 	char query[1024];
 	FormatEx(query, sizeof(query),
 					"SELECT `target_steamid` AS `tar_id`, NULL AS `grp_id`,"
@@ -1478,7 +1480,7 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 				steamID, steamID, steamID
 	);
 
-	g_hDB.Query(DB_OnGetClientTargets, query, userid);
+	g_hDB.Query(DB_OnGetClientTargets, query, userid, DBPrio_Normal);
 }
 
 void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error, int userid) {
@@ -1730,7 +1732,7 @@ void DeleteMuteFromDatabase(int client, const char[] id, MuteTarget muteTarget) 
 			clientSteamID, escapedGroupFilter);
 	}
 
-	g_hDB.Query(DB_OnRemove, query);
+	g_hDB.Query(DB_OnRemove, query, _, DBPrio_Normal);
 }
 
 void DB_OnRemove(Database db, DBResultSet results, const char[] error, any data) {
@@ -1800,7 +1802,7 @@ void SaveSelfMuteClient(int client, int target) {
 										view_as<int>(g_bClientVoice[client][target]));
 	}
 
-	g_hDB.Query(DB_OnInsertData, query);
+	g_hDB.Query(DB_OnInsertData, query, _, DBPrio_High);
 
 	IsThisMutedPerma(client, g_PlayerData[target].steamID, MuteTarget_Client, true);
 	MuteType muteType = GetMuteType(g_bClientText[client][target], g_bClientVoice[client][target]);
@@ -1841,7 +1843,7 @@ void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
 	}
 
-	g_hDB.Query(DB_OnInsertData, query);
+	g_hDB.Query(DB_OnInsertData, query, _, DBPrio_High);
 
 	IsThisMutedPerma(client, g_sGroupsFilters[view_as<int>(groupFilter)], MuteTarget_Group, true);
 	MuteType muteType = GetMuteType(g_bClientGroupText[client][view_as<int>(groupFilter)], g_bClientGroupVoice[client][view_as<int>(groupFilter)]);
@@ -1888,7 +1890,7 @@ void DB_UpdateClientData(int client, int mode) {
 											view_as<int>(g_PlayerData[client].muteDuration));
 		}
 
-		g_hDB.Query(DB_OnAddData, query);
+		g_hDB.Query(DB_OnAddData, query, _, DBPrio_Normal);
 
 		g_PlayerData[client].addedToDB = true;
 
@@ -1907,7 +1909,7 @@ void DB_UpdateClientData(int client, int mode) {
 										(mode == 0) ? view_as<int>(g_PlayerData[client].muteType) : view_as<int>(g_PlayerData[client].muteDuration),
 										steamID);
 
-		g_hDB.Query(DB_OnUpdateData, query);
+		g_hDB.Query(DB_OnUpdateData, query, _, DBPrio_Normal);
 	}
 }
 
