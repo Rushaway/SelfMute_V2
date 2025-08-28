@@ -1491,7 +1491,7 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		char targetName[32];
 		results.FetchString(0, targetName, sizeof(targetName));
 		
-		bool isGroup = !results.IsFieldNull(1);
+		bool isGroup = results.IsFieldNull(1);
 		
 		bool text = view_as<bool>(results.FetchInt(3));
 		bool voice = view_as<bool>(results.FetchInt(4));
