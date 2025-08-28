@@ -1464,7 +1464,7 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
 				... "FROM `groups_mute` WHERE `client_steamid`=%d "
 				... "UNION ALL "
-				... "SELECT NULL AS `tar_name`, `client_steamid` AS `tar_id`, NULL AS `grp_id`"
+				... "SELECT NULL AS `tar_name`, `client_steamid` AS `tar_id`, NULL AS `grp_id`,"
 				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
 				... "FROM `clients_mute` WHERE `target_steamid`=%d",
 				steamID, steamID, steamID
