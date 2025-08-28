@@ -1440,7 +1440,7 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 	
 	int steamID = StringToInt(g_PlayerData[client].steamID);
 	
-	if (results.FetchRow()) {
+	if (results != null && results.FetchRow()) {
 		g_PlayerData[client].addedToDB = true;
 		
 		g_PlayerData[client].muteType = view_as<MuteType>(results.FetchInt(0));
@@ -1488,7 +1488,7 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		return;
 	}
 	
-	PrintToChat("DB_OnGetClientTargets callback");
+	PrintToChatAll("DB_OnGetClientTargets callback");
 	
 	while(results.FetchRow()) {
 		PrintToChatAll("Found row");
@@ -1752,7 +1752,7 @@ void SaveSelfMuteClient(int client, int target) {
 	int clientSteamID = StringToInt(g_PlayerData[client].steamID);
 	int targetSteamID = StringToInt(g_PlayerData[target].steamID);
 	
-	if (!clientSteamID || targetSteamID == 0) {
+	if (!clientSteamID || !targetSteamID) {
 		return;
 	}
 	
