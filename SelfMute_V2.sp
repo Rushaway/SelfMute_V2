@@ -1690,7 +1690,7 @@ void ApplySelfUnMuteGroup(int client, GroupFilter groupFilter) {
 	DeleteMuteFromDatabase(client, g_sGroupsFilters[target], MuteTarget_Group);
 }
 
-void DeleteMuteFromDatabase(int client, char[] id, MuteTarget muteTarget) {
+void DeleteMuteFromDatabase(int client, const char[] id, MuteTarget muteTarget) {
 	if (!IsThisMutedPerma(client, id, muteTarget, true)) {
 		return;
 	}
