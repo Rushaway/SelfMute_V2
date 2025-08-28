@@ -1,4 +1,3 @@
-
 #pragma semicolon 1
 
 #include <sourcemod>
@@ -1261,7 +1260,7 @@ void DB_Tables() {
 		char query0[1024];		
 		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_data`("
 												... "`id` int(11) unsigned NOT NULL auto_increment," 
-												... "`client_steamid` int(20) NOT NULL," 
+												... "`client_steamid` bigint unsigned NOT NULL," 
 												... "`mute_type` int(2) NOT NULL,"
 												... "`mute_duration` int(2) NOT NULL,"
 												... "PRIMARY KEY(`id`))");
@@ -1271,9 +1270,9 @@ void DB_Tables() {
 		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_mute`("
 												... "`id` int(11) unsigned NOT NULL auto_increment," 
 												... "`client_name` varchar(32) NOT NULL," 
-												... "`client_steamid` int(20) NOT NULL," 
+												... "`client_steamid` bigint unsigned NOT NULL," 
 												... "`target_name` varchar(32) NOT NULL," 
-												... "`target_steamid` int(20) NOT NULL," 
+												... "`target_steamid` bigint unsigned NOT NULL," 
 												... "`text_chat` int(2) NOT NULL,"
 												... "`voice_chat` int(2) NOT NULL,"
 												... "PRIMARY KEY(`id`),"
@@ -1284,7 +1283,7 @@ void DB_Tables() {
 		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `groups_mute`("
 												... "`id` int(11) unsigned NOT NULL auto_increment," 
 												... "`client_name` varchar(32) NOT NULL," 
-												... "`client_steamid` int(20) NOT NULL," 
+												... "`client_steamid` bigint unsigned NOT NULL," 
 												... "`group_name` varchar(32) NOT NULL," 
 												... "`group_filter` varchar(20) NOT NULL," 
 												... "`text_chat` int(2) NOT NULL,"
@@ -1311,7 +1310,7 @@ void DB_Tables() {
 		char query0[1024];		
 		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_data`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
-												... "`client_steamid` int(20) NOT NULL," 
+												... "`client_steamid` INTEGER NOT NULL," 
 												... "`mute_type` int(2) NOT NULL,"
 												... "`mute_duration` int(2) NOT NULL,"
 												... "UNIQUE KEY(`client_steamid`))");
@@ -1322,9 +1321,9 @@ void DB_Tables() {
 		g_hDB.Format(query1, sizeof(query1), "CREATE TABLE IF NOT EXISTS `clients_mute`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_name` varchar(32) NOT NULL," 
-												... "`client_steamid` int(20) NOT NULL," 
+												... "`client_steamid` INTEGER NOT NULL," 
 												... "`target_name` varchar(32) NOT NULL," 
-												... "`target_steamid` int(20) NOT NULL," 
+												... "`target_steamid` INTEGER NOT NULL," 
 												... "`text_chat` int(2) NOT NULL,"
 												... "`voice_chat` int(2) NOT NULL,"
 												... "UNIQUE KEY(`client_steamid`, `target_steamid`))");
@@ -1335,7 +1334,7 @@ void DB_Tables() {
 		g_hDB.Format(query2, sizeof(query2), "CREATE TABLE IF NOT EXISTS `groups_mute`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_name` varchar(32) NOT NULL," 
-												... "`client_steamid` int(20) NOT NULL," 
+												... "`client_steamid` INTEGER NOT NULL," 
 												... "`group_name` varchar(32) NOT NULL," 
 												... "`group_filter` varchar(20) NOT NULL,"
 												... "`text_chat` int(2) NOT NULL,"
@@ -1686,6 +1685,7 @@ void DeleteMuteFromDatabase(int client, char[] id, MuteTarget muteTarget) {
 		return;
 	}
 	
+	if (muteTarget == MuteTarget_Group) {
 		char tempId[20];
 		strcopy(tempId, sizeof(tempId), id);
 		FormatEx(id, 20, "'%s'", tempId);
