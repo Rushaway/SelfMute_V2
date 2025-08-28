@@ -248,7 +248,7 @@ void LateLoadClients() {
 			continue;
 		}
 
-        OnClientConnected(i);
+		OnClientConnected(i);
 
 		if (IsClientAuthorized(i)) {
 			OnClientPostAdminCheck(i);
@@ -1000,8 +1000,8 @@ void StartSelfMute(int client, int target, MuteType muteType, MuteDuration muteD
 		case MuteDuration_Temporary: {
 			if (IsClientAdmin(target)) {
 				CPrintToChat(client, "You are using SelfMute on an admin, be careful!");
-        		LogAction(client, target, "%L Self-Muted an admin. %L", client, target);
-        	}
+				LogAction(client, target, "%L Self-Muted an admin. %L", client, target);
+			}
 
 			ApplySelfMute(client, target, muteType);
 			MuteType muteTypeEx = GetMuteType(g_bClientText[client][target], g_bClientVoice[client][target]);
@@ -1457,13 +1457,13 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 	}
 
 	/*
-     * Now get mute list duh, get both the client as a client and as a target
-	 * We will select 4 fields of each table, though not all fields are required, NULL will be given
-	 * 0. `tar_id`			-> Target (player) steamID (int)
-	 * 1. `grp_id`			-> Group Filter char (string)
-	 * 2. `text_chat`		-> Target (player & group) Text Chat Status (tinyint or int(2))
-	 * 3. `voice_chat`		-> Target (player & group) Voice Chat Status (tinyint or int(2))
-	 */
+	* Now get mute list duh, get both the client as a client and as a target
+	* We will select 4 fields of each table, though not all fields are required, NULL will be given
+	* 0. `tar_id`			-> Target (player) steamID (int)
+	* 1. `grp_id`			-> Group Filter char (string)
+	* 2. `text_chat`		-> Target (player & group) Text Chat Status (tinyint or int(2))
+	* 3. `voice_chat`		-> Target (player & group) Voice Chat Status (tinyint or int(2))
+	*/
 	char query[1024];
 	FormatEx(query, sizeof(query),
 					"SELECT `target_steamid` AS `tar_id`, NULL AS `grp_id`,"
@@ -1545,7 +1545,7 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 			results.FetchString(1, groupFilter, sizeof(groupFilter));
 
 			SelfMute myMute;
-			myMute.AddMute(_, groupFilter, muteType, MuteTarget_Group);
+			myMute.AddMute("", groupFilter, muteType, MuteTarget_Group);
 			g_PlayerData[desiredClient].mutesList.PushArray(myMute);
 
 			ApplySelfMuteGroup(desiredClient, groupFilter, muteType);
