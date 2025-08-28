@@ -1261,7 +1261,7 @@ void DB_Tables() {
 		char query0[1024];		
 		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_data`("
 												... "`id` int(11) unsigned NOT NULL auto_increment," 
-												... "`client_steamid` varchar(20) NOT NULL," 
+												... "`client_steamid` int(20) NOT NULL," 
 												... "`mute_type` int(2) NOT NULL,"
 												... "`mute_duration` int(2) NOT NULL,"
 												... "PRIMARY KEY(`id`))");
@@ -1271,9 +1271,9 @@ void DB_Tables() {
 		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_mute`("
 												... "`id` int(11) unsigned NOT NULL auto_increment," 
 												... "`client_name` varchar(32) NOT NULL," 
-												... "`client_steamid` varchar(20) NOT NULL," 
+												... "`client_steamid` int(20) NOT NULL," 
 												... "`target_name` varchar(32) NOT NULL," 
-												... "`target_steamid` varchar(20) NOT NULL," 
+												... "`target_steamid` int(20) NOT NULL," 
 												... "`text_chat` int(2) NOT NULL,"
 												... "`voice_chat` int(2) NOT NULL,"
 												... "PRIMARY KEY(`id`),"
@@ -1284,7 +1284,7 @@ void DB_Tables() {
 		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `groups_mute`("
 												... "`id` int(11) unsigned NOT NULL auto_increment," 
 												... "`client_name` varchar(32) NOT NULL," 
-												... "`client_steamid` varchar(20) NOT NULL," 
+												... "`client_steamid` int(20) NOT NULL," 
 												... "`group_name` varchar(32) NOT NULL," 
 												... "`group_filter` varchar(20) NOT NULL," 
 												... "`text_chat` int(2) NOT NULL,"
@@ -1311,7 +1311,7 @@ void DB_Tables() {
 		char query0[1024];		
 		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_data`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
-												... "`client_steamid` varchar(20) NOT NULL," 
+												... "`client_steamid` int(20) NOT NULL," 
 												... "`mute_type` int(2) NOT NULL,"
 												... "`mute_duration` int(2) NOT NULL,"
 												... "UNIQUE KEY(`client_steamid`))");
@@ -1322,9 +1322,9 @@ void DB_Tables() {
 		g_hDB.Format(query1, sizeof(query1), "CREATE TABLE IF NOT EXISTS `clients_mute`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_name` varchar(32) NOT NULL," 
-												... "`client_steamid` varchar(20) NOT NULL," 
+												... "`client_steamid` int(20) NOT NULL," 
 												... "`target_name` varchar(32) NOT NULL," 
-												... "`target_steamid` varchar(20) NOT NULL," 
+												... "`target_steamid` int(20) NOT NULL," 
 												... "`text_chat` int(2) NOT NULL,"
 												... "`voice_chat` int(2) NOT NULL,"
 												... "UNIQUE KEY(`client_steamid`, `target_steamid`))");
@@ -1335,7 +1335,7 @@ void DB_Tables() {
 		g_hDB.Format(query2, sizeof(query2), "CREATE TABLE IF NOT EXISTS `groups_mute`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_name` varchar(32) NOT NULL," 
-												... "`client_steamid` varchar(20) NOT NULL," 
+												... "`client_steamid` int(20) NOT NULL," 
 												... "`group_name` varchar(32) NOT NULL," 
 												... "`group_filter` varchar(20) NOT NULL,"
 												... "`text_chat` int(2) NOT NULL,"
@@ -1403,12 +1403,14 @@ public void OnClientPostAdminCheck(int client) {
 	}
 	
 	/* Get Client Data */
-	char steamID[20];
-	if (!GetClientAuthId(client, AuthId_Steam2, steamID, sizeof(steamID))) {
-		/* Impossible to happen */
+	int steamID = GetSteamAccountID(client);
+	if (!steamID) {
 		return;
 	}
-
+	
+	char steamIDStr[20];
+	IntToString(steamID, steamIDStr, sizeof(steamIDStr));
+	
 	char clientName[MAX_NAME_LENGTH];
 	if (!GetClientName(client, clientName, sizeof(clientName))) {
 		return;
@@ -1417,10 +1419,10 @@ public void OnClientPostAdminCheck(int client) {
 	MuteType muteType = view_as<MuteType>(g_cvDefaultMuteTypeSettings.IntValue);
 	MuteDuration muteDuration = view_as<MuteDuration>(g_cvDefaultMuteDurationSettings.IntValue);
 	
-	g_PlayerData[client].Setup(clientName, steamID, muteType, muteDuration);
+	g_PlayerData[client].Setup(clientName, steamIDStr, muteType, muteDuration);
 	
 	char query[1024];
-	FormatEx(query, sizeof(query), "SELECT `client_steamid`,`mute_type`,`mute_duration` FROM `clients_data` WHERE `client_steamid`='%s'", steamID);
+	FormatEx(query, sizeof(query), "SELECT `client_steamid`,`mute_type`,`mute_duration` FROM `clients_data` WHERE `client_steamid`=%d", steamID);
 	g_hDB.Query(DB_OnGetClientData, query, GetClientUserId(client));
 }
 
@@ -1435,36 +1437,37 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 		return;
 	}
 	
-	char steamID[20];
+	int steamID;
 	
 	if (results.FetchRow()) {
 		g_PlayerData[client].addedToDB = true;
 		
-		results.FetchString(0, steamID, sizeof(steamID));
+		steamID = results.FetchInt(0);
 		g_PlayerData[client].muteType = view_as<MuteType>(results.FetchInt(1));
 		g_PlayerData[client].muteDuration = view_as<MuteDuration>(results.FetchInt(2));
 	}
-	
-	char steamIDEscaped[sizeof(steamID) * 2 + 1];
-	if (!g_hDB.Escape(g_PlayerData[client].steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
-		return;
-	}
 		
 	/* Now get mute list duh, get both the client as a client and as a target */
+	/* We will select 5 fieds of each table, though not all fields are required, NULL will be given */
+	/* 0. `target_name`	-> Target (player) name OR the group name (string) */
+	/* 1. `tar_id`			-> Target (player) steamID (int) */
+	/* 2. `grp_id`			-> Group Filter char (string) */
+	/* 3. `text_chat`		-> Target (player & group) Text Chat Status (tinyint or int(2)) */
+	/* 4. `voice_chat`		-> Target (player & group) Voice Chat Status (tinyint or int(2)) */
 	char query[512];
 	FormatEx(query, sizeof(query), 
-					"SELECT `target_name` AS `tar_name`, `target_steamid` AS `tar_id`,"
+					"SELECT `target_name` AS `tar_name`, `target_steamid` AS `tar_id`, NULL AS `grp_id`,"
 				...	"`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
-				... "FROM `clients_mute` WHERE `client_steamid`='%s' "
+				... "FROM `clients_mute` WHERE `client_steamid`=%d "
 				... "UNION ALL "
-				... "SELECT `group_name` AS `tar_name`, `group_filter` AS `tar_id`,"
+				... "SELECT `group_name` AS `tar_name`, NULL AS `tar_id`, `group_filter` AS `grp_id`,"
 				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
-				... "FROM `groups_mute` WHERE `client_steamid`='%s' "
+				... "FROM `groups_mute` WHERE `client_steamid`=%d "
 				... "UNION ALL "
-				... "SELECT \"\" AS `tar_name`, `client_steamid` AS `tar_id`,"
+				... "SELECT NULL AS `tar_name`, `client_steamid` AS `tar_id`, NULL AS `grp_id`"
 				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
-				... "FROM `clients_mute` WHERE `target_steamid`='%s'",
-				steamIDEscaped, steamIDEscaped, steamIDEscaped
+				... "FROM `clients_mute` WHERE `target_steamid`=%d",
+				steamID, steamID, steamID
 	);
 	
 	g_hDB.Query(DB_OnGetClientTargets, query, userid);
@@ -1489,15 +1492,17 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		char targetName[32];
 		results.FetchString(0, targetName, sizeof(targetName));
 		
-		char targetID[20];
-		results.FetchString(1, targetID, sizeof(targetID));
+		bool isGroup = !results.IsFieldNull(1);
 		
 		bool text = view_as<bool>(results.FetchInt(2));
 		bool voice = view_as<bool>(results.FetchInt(3));
 		MuteType muteType = GetMuteType(text, voice);
 		
-		if (targetID[0] != '@') {
-			int target = GetClientBySteamID(targetID);
+		if (!isGroup) {
+			char steamIDStr[20];
+			IntToString(results.FetchInt(1), steamIDStr, sizeof(steamIDStr));
+			
+			int target = GetClientBySteamID(steamIDStr);
 			if (target == -1) {
 				continue;
 			}
@@ -1506,16 +1511,19 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 				ApplySelfMute(target, desiredClient, muteType);
 			} else {
 				SelfMute myMute;
-				myMute.AddMute(targetName, targetID, muteType, MuteTarget_Client);
+				myMute.AddMute(targetName, steamIDStr, muteType, MuteTarget_Client);
 				g_PlayerData[desiredClient].mutesList.PushArray(myMute);
 				ApplySelfMute(desiredClient, target, muteType);		
 			}
 		} else {
+			char groupFilter[20];
+			results.FetchString(1, groupFilter, sizeof(groupFilter));
+			
 			SelfMute myMute;
-			myMute.AddMute(targetName, targetID, muteType, MuteTarget_Group);
+			myMute.AddMute(targetName, groupFilter, muteType, MuteTarget_Group);
 			g_PlayerData[desiredClient].mutesList.PushArray(myMute);
 			
-			ApplySelfMuteGroup(desiredClient, targetID, muteType);
+			ApplySelfMuteGroup(desiredClient, groupFilter, muteType);
 		}
 	}
 }
@@ -1673,15 +1681,19 @@ void ApplySelfUnMuteGroup(int client, GroupFilter groupFilter) {
 	DeleteMuteFromDatabase(client, g_sGroupsFilters[target], MuteTarget_Group);
 }
 
-void DeleteMuteFromDatabase(int client, const char[] id, MuteTarget muteTarget) {
+void DeleteMuteFromDatabase(int client, char[] id, MuteTarget muteTarget) {
 	if (!IsThisMutedPerma(client, id, muteTarget, true)) {
 		return;
 	}
 	
+	if (muteTarget == MuteTarget_Group) {
+		FormatEx(id, 20, "'%s'", id);
+	}
+	
 	char query[124];
-	FormatEx(query, sizeof(query), "DELETE FROM `%s` WHERE `client_steamid`='%s' AND `%s`='%s'", 
+	FormatEx(query, sizeof(query), "DELETE FROM `%s` WHERE `client_steamid`=%d AND `%s`=%s", 
 	(muteTarget == MuteTarget_Client) ? "clients_mute" : "groups_mute",
-	g_PlayerData[client].steamID,
+	StringToInt(g_PlayerData[client].steamID),
 	(muteTarget == MuteTarget_Client) ? "target_steamid" : "group_filter",
 	id);
 	
@@ -1716,21 +1728,24 @@ bool IsThisMutedPerma(int client, const char[] id, MuteTarget muteTarget, bool r
 
 void SaveSelfMuteClient(int client, int target) {
 	char clientName[sizeof(PlayerData::name) * 2 + 1];
-	char clientSteamID[sizeof(PlayerData::steamID) * 2 + 1];
 	char targetName[sizeof(PlayerData::name) * 2 + 1];
-	char targetSteamID[sizeof(PlayerData::steamID) * 2 + 1];
 	
 	if (!g_hDB.Escape(g_PlayerData[client].name, clientName, sizeof(clientName))
-		|| !g_hDB.Escape(g_PlayerData[client].steamID, clientSteamID, sizeof(clientSteamID))
-		|| !g_hDB.Escape(g_PlayerData[target].name, targetName, sizeof(targetName))
-		|| !g_hDB.Escape(g_PlayerData[target].steamID, targetSteamID, sizeof(targetSteamID))) {
+		|| !g_hDB.Escape(g_PlayerData[target].name, targetName, sizeof(targetName))) {
+		return;
+	}
+	
+	int clientSteamID = StringToInt(g_PlayerData[client].steamID);
+	int targetSteamID = StringToInt(g_PlayerData[target].steamID);
+	
+	if (!clientSteamID || targetSteamID == 0) {
 		return;
 	}
 	
 	char query[512];
 	if (!g_bSQLLite) {
 		FormatEx(query, sizeof(query), "INSERT INTO `clients_mute` (`client_name`, `client_steamid`, `target_name`, `target_steamid`,"
-										... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
+										... "`text_chat`, `voice_chat`) VALUES ('%s', %d, '%s', %d, %d, %d)"
 										... "ON DUPLICATE KEY UPDATE `client_name`='%s', `target_name`='%s', `text_chat`=%d, `voice_chat`=%d",
 										clientName, clientSteamID, targetName,
 										targetSteamID, view_as<int>(g_bClientText[client][target]),
@@ -1740,7 +1755,7 @@ void SaveSelfMuteClient(int client, int target) {
 										view_as<int>(g_bClientVoice[client][target]));
 	} else {
 		FormatEx(query, sizeof(query), "REPLACE INTO `clients_mute` (`client_name`, `client_steamid`, `target_name`, `target_steamid`,"
-										... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)",
+										... "`text_chat`, `voice_chat`) VALUES ('%s', %d, '%s', %d, %d, %d)",
 										clientName, clientSteamID, targetName,
 										targetSteamID, view_as<int>(g_bClientText[client][target]),
 										view_as<int>(g_bClientVoice[client][target]));
@@ -1748,7 +1763,7 @@ void SaveSelfMuteClient(int client, int target) {
 									
 	g_hDB.Query(DB_OnInsertData, query);
 	
-	IsThisMutedPerma(client, g_PlayerData[target].steamID, MuteTarget_Client, true);
+	IsThisMutedPerma(client, g_PlayerData[client].steamID, MuteTarget_Client, true);
 	MuteType muteType = GetMuteType(g_bClientText[client][target], g_bClientVoice[client][target]);
 	
 	SelfMute myMute;
@@ -1758,20 +1773,24 @@ void SaveSelfMuteClient(int client, int target) {
 
 void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 	char clientName[sizeof(PlayerData::name) * 2 + 1];
-	char clientSteamID[sizeof(PlayerData::steamID) * 2 + 1];
 	char groupName[32 * 2 + 1];
 	char groupFilterC[20 * 2 + 1];
 	
 	if (!g_hDB.Escape(g_PlayerData[client].name, clientName, sizeof(clientName))
-		|| !g_hDB.Escape(g_PlayerData[client].steamID, clientSteamID, sizeof(clientSteamID))
 		|| !g_hDB.Escape(g_sGroupsNames[view_as<int>(groupFilter)], groupName, sizeof(groupName))
 		|| !g_hDB.Escape(g_sGroupsFilters[view_as<int>(groupFilter)], groupFilterC, sizeof(groupFilterC))) {
 		return;
 	}
+	
+	int clientSteamID = StringToInt(g_PlayerData[client].steamID);
+	if (!clientSteamID) {
+		return;
+	}
+	
 	char query[512];
 	if (!g_bSQLLite) {
 		FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
-										... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)"
+										... "`text_chat`, `voice_chat`) VALUES ('%s', %d, '%s', '%s', %d, %d)"
 										... "ON DUPLICATE KEY UPDATE `client_name`='%s', `text_chat`=%d, `voice_chat`=%d",
 										clientName, clientSteamID, groupName,
 										groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
@@ -1780,8 +1799,8 @@ void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 										view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
 										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
 	} else {
-		FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
-										... "`text_chat`, `voice_chat`) VALUES ('%s', '%s', '%s', '%s', %d, %d)",
+		FormatEx(query, sizeof(query), "REPLACE INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
+										... "`text_chat`, `voice_chat`) VALUES ('%s', %d, '%s', '%s', %d, %d)",
 										clientName, clientSteamID, groupName,
 										groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
 										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
@@ -1808,19 +1827,19 @@ void DB_UpdateClientData(int client, int mode) {
 		return;
 	}
 	
-	if (!g_PlayerData[client].addedToDB) {
-		char steamIDEscaped[sizeof(PlayerData::steamID) * 2 + 1];
-		if (!g_hDB.Escape(g_PlayerData[client].steamID, steamIDEscaped, sizeof(steamIDEscaped))) {
-			return;
-		}
+	int steamID = StringToInt(g_PlayerData[client].steamID);
+	if (!steamID) {
+		return;
+	}
 		
+	if (!g_PlayerData[client].addedToDB) {
 		char query[120];
 		if (!g_bSQLLite) {
 			FormatEx(query, sizeof(query), "INSERT INTO `clients_data` ("
 											... "`client_steamid`, `mute_type`, `mute_duration`)"
-											... "VALUES ('%s', %d, %d) "
+											... "VALUES (%d, %d, %d) "
 											... "ON DUPLICATE KEY UPDATE `mute_type`=%d, `mute_duration`=%d", 
-											steamIDEscaped, 
+											steamID, 
 											view_as<int>(g_PlayerData[client].muteType), 
 											view_as<int>(g_PlayerData[client].muteDuration),
 											view_as<int>(g_PlayerData[client].muteType), 
@@ -1828,8 +1847,8 @@ void DB_UpdateClientData(int client, int mode) {
 		} else {
 			FormatEx(query, sizeof(query), "REPLACE INTO `clients_data` ("
 											... "`client_steamid`, `mute_type`, `mute_duration`)"
-											... "VALUES ('%s', %d, %d)",
-											steamIDEscaped, 
+											... "VALUES (%d, %d, %d)",
+											steamID, 
 											view_as<int>(g_PlayerData[client].muteType), 
 											view_as<int>(g_PlayerData[client].muteDuration));
 		}
@@ -1848,10 +1867,10 @@ void DB_UpdateClientData(int client, int mode) {
 	if (g_PlayerData[client].steamID[0]) {
 		/* Update client data in sql */
 		char query[256];
-		FormatEx(query, sizeof(query), "UPDATE `clients_data` SET `%s`=%d WHERE `client_steamid`='%s'",
+		FormatEx(query, sizeof(query), "UPDATE `clients_data` SET `%s`=%d WHERE `client_steamid`=%d",
 										(mode == 0) ? "mute_type" : "mute_duration", 
 										(mode == 0) ? view_as<int>(g_PlayerData[client].muteType) : view_as<int>(g_PlayerData[client].muteDuration),
-										g_PlayerData[client].steamID);
+										steamID);
 										
 		g_hDB.Query(DB_OnUpdateData, query);
 	}
