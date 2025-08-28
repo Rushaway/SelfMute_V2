@@ -1344,7 +1344,7 @@ void DB_Tables() {
 												... "`target_name` TEXT NOT NULL,"
 												... "`text_chat` INTEGER NOT NULL,"
 												... "`voice_chat` INTEGER NOT NULL,"
-												... "PRIMARY KEY (client_steamid, target_steamid)))");
+												... "PRIMARY KEY (client_steamid, target_steamid))");
 
 		T_sqliteTables.AddQuery(query1);
 
