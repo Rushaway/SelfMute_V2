@@ -1453,7 +1453,7 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 	/* 2. `grp_id`			-> Group Filter char (string) */
 	/* 3. `text_chat`		-> Target (player & group) Text Chat Status (tinyint or int(2)) */
 	/* 4. `voice_chat`		-> Target (player & group) Voice Chat Status (tinyint or int(2)) */
-	char query[512];
+	char query[1024];
 	FormatEx(query, sizeof(query), 
 					"SELECT `target_name` AS `tar_name`, `target_steamid` AS `tar_id`, NULL AS `grp_id`,"
 				...	"`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
