@@ -825,9 +825,9 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 	#endif
 	
 	GroupFilter groupFilter = GROUP_MAX_NUM;
-	PrintToChatAll("Group to selfmute: %s", groupFilterC);
+	CPrintToChatAll("Group to selfmute: %s", groupFilterC);
 	for (int i = 0; i < sizeof(g_sGroupsFilters); i++) {
-		PrintToChatAll("Found Group Filter: %s", g_sGroupsFilters[i]);
+		CPrintToChatAll("Found Group Filter: %s", g_sGroupsFilters[i]);
 		if (strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0 || StrContains(groupFilterC, g_sGroupsFilters[i], false) != -1) {
 			groupFilter = view_as<GroupFilter>(i);
 			break;
@@ -962,7 +962,7 @@ int Menu_ShowMuteType(Menu menu, MenuAction action, int param1, int param2) {
 			
 			int target = GetClientOfUserId(StringToInt(data[1]));
 			if (!target) {
-				PrintToChat(param1, "Userid: %s", data[1]);
+				CPrintToChat(param1, "Userid: %s", data[1]);
 				CPrintToChat(param1, "Player is no longer available.");
 				return -1;
 			}
@@ -979,7 +979,7 @@ void StartSelfMute(int client, int target, MuteType muteType, MuteDuration muteD
 	switch(muteDuration) {
 		case MuteDuration_Temporary: {
 			if (IsClientAdmin(target)) {
-				CPrintToChat(client, "You are using SelfMute on an admin, be careful!", target);
+				CPrintToChat(client, "You are using SelfMute on an admin, be careful!");
         		LogAction(client, target, "%L Self-Muted an admin. %L", client, target);
         	}
         	
@@ -1489,10 +1489,10 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		return;
 	}
 	
-	PrintToChatAll("DB_OnGetClientTargets callback");
+	CPrintToChatAll("DB_OnGetClientTargets callback");
 	
 	while(results.FetchRow()) {
-		PrintToChatAll("Found row");
+		CPrintToChatAll("Found row");
 		
 		char targetName[32];
 		results.FetchString(0, targetName, sizeof(targetName));
@@ -1504,14 +1504,14 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		MuteType muteType = GetMuteType(text, voice);
 		
 		if (!isGroup) {
-			PrintToChatAll("Mute is NOT group");
+			CPrintToChatAll("Mute is NOT group");
 			char steamIDStr[20];
 			IntToString(results.FetchInt(1), steamIDStr, sizeof(steamIDStr));
 			
-			PrintToChatAll("Mute Data: \nclient: %N\ntarget steamID: %s", desiredClient, steamIDStr);
+			CPrintToChatAll("Mute Data: \nclient: %N\ntarget steamID: %s", desiredClient, steamIDStr);
 			int target = GetClientBySteamID(steamIDStr);
 			if (target == -1) {
-				PrintToChatAll("Target is -1, stemaID: %s", steamIDStr);
+				CPrintToChatAll("Target is -1, stemaID: %s", steamIDStr);
 				continue;
 			}
 			
@@ -1522,10 +1522,10 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 				myMute.AddMute(targetName, steamIDStr, muteType, MuteTarget_Client);
 				g_PlayerData[desiredClient].mutesList.PushArray(myMute);
 				ApplySelfMute(desiredClient, target, muteType);
-				PrintToChatAll("Applying selfmute...");
+				CPrintToChatAll("Applying selfmute...");
 			}
 		} else {
-			PrintToChatAll("Mute is GROUP");
+			CPrintToChatAll("Mute is GROUP");
 			char groupFilter[20];
 			results.FetchString(2, groupFilter, sizeof(groupFilter));
 			
