@@ -1763,7 +1763,7 @@ void SaveSelfMuteClient(int client, int target) {
 									
 	g_hDB.Query(DB_OnInsertData, query);
 	
-	IsThisMutedPerma(client, g_PlayerData[client].steamID, MuteTarget_Client, true);
+	IsThisMutedPerma(client, g_PlayerData[target].steamID, MuteTarget_Client, true);
 	MuteType muteType = GetMuteType(g_bClientText[client][target], g_bClientVoice[client][target]);
 	
 	SelfMute myMute;
