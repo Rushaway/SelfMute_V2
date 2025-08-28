@@ -1220,7 +1220,7 @@ void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast) {
 
 /* Database Setup */
 void ConnectToDB() {
-	Database.Connect(DB_OnConnect, "SelfMute");
+	Database.Connect(DB_OnConnect, "SelfMuteV2");
 }
 
 public void DB_OnConnect(Database db, const char[] error, any data) {
