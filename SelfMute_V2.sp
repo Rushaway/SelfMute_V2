@@ -82,7 +82,8 @@ enum GroupFilter {
 	GROUP_TS = 2,
 	GROUP_SPECTATORS = 3,
 	GROUP_NOSTEAM = 4,
-	GROUP_MAX_NUM = 5
+	GROUP_STEAM = 5,
+	GROUP_MAX_NUM = 6
 };
 
 char g_sGroupsNames[][] = {
@@ -95,7 +96,8 @@ char g_sGroupsNames[][] = {
 	"Terrorists",
 #endif
 	"Spectators",
-	"No-Steam Players"
+	"No-Steam Players",
+	"Steam Players"
 };
 
 char g_sGroupsFilters[][] = {
@@ -103,7 +105,8 @@ char g_sGroupsFilters[][] = {
 	"@cts",
 	"@ts",
 	"@spectators",
-	"@nosteam"
+	"@nosteam",
+	"@steam"
 };
 
 enum struct PlayerData {
@@ -2070,6 +2073,16 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		case GROUP_NOSTEAM: {
 			#if defined _PlayerManager_included
 			if (!PM_IsPlayerSteam(client)) {
+				return true;
+			}
+			#endif
+			
+			return false;
+		}
+		
+		case GROUP_STEAM: {
+			#if defined _PlayerManager_included
+			if (PM_IsPlayerSteam(client)) {
 				return true;
 			}
 			#endif
