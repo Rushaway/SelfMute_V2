@@ -1488,6 +1488,8 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 	}
 	
 	while(results.FetchRow()) {
+		PrintToChatAll("Found row");
+		
 		char targetName[32];
 		results.FetchString(0, targetName, sizeof(targetName));
 		
@@ -1498,11 +1500,14 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		MuteType muteType = GetMuteType(text, voice);
 		
 		if (!isGroup) {
+			PrintToChatAll("Mute is NOT group");
 			char steamIDStr[20];
 			IntToString(results.FetchInt(1), steamIDStr, sizeof(steamIDStr));
 			
+			PrintToChatAll("Mute Data: \nclient: %N\ntarget steamID: %s", desiredClient, steamIDStr);
 			int target = GetClientBySteamID(steamIDStr);
 			if (target == -1) {
+				PrintToChatAll("Target is -1, stemaID: %s", steamIDStr);
 				continue;
 			}
 			
@@ -1512,9 +1517,11 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 				SelfMute myMute;
 				myMute.AddMute(targetName, steamIDStr, muteType, MuteTarget_Client);
 				g_PlayerData[desiredClient].mutesList.PushArray(myMute);
-				ApplySelfMute(desiredClient, target, muteType);		
+				ApplySelfMute(desiredClient, target, muteType);
+				PrintToChatAll("Applying selfmute...");
 			}
 		} else {
+			PrintToChatAll("Mute is GROUP");
 			char groupFilter[20];
 			results.FetchString(2, groupFilter, sizeof(groupFilter));
 			
