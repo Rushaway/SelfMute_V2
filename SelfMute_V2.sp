@@ -1421,7 +1421,7 @@ public void OnClientPostAdminCheck(int client) {
 	g_PlayerData[client].Setup(clientName, steamIDStr, muteType, muteDuration);
 	
 	char query[1024];
-	FormatEx(query, sizeof(query), "SELECT `client_steamid`,`mute_type`,`mute_duration` FROM `clients_data` WHERE `client_steamid`=%d", steamID);
+	FormatEx(query, sizeof(query), "SELECT `mute_type`,`mute_duration` FROM `clients_data` WHERE `client_steamid`=%d", steamID);
 	g_hDB.Query(DB_OnGetClientData, query, GetClientUserId(client));
 }
 
@@ -1436,14 +1436,13 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 		return;
 	}
 	
-	int steamID;
+	int steamID = StringToInt(g_PlayerData[client].steamID);
 	
 	if (results.FetchRow()) {
 		g_PlayerData[client].addedToDB = true;
 		
-		steamID = results.FetchInt(0);
-		g_PlayerData[client].muteType = view_as<MuteType>(results.FetchInt(1));
-		g_PlayerData[client].muteDuration = view_as<MuteDuration>(results.FetchInt(2));
+		g_PlayerData[client].muteType = view_as<MuteType>(results.FetchInt(0));
+		g_PlayerData[client].muteDuration = view_as<MuteDuration>(results.FetchInt(1));
 	}
 		
 	/* Now get mute list duh, get both the client as a client and as a target */
