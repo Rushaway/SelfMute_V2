@@ -5,7 +5,7 @@
 #include <cstrike>
 #include <multicolors>
 #include <clientprefs>
-//#include <ccc>
+#include <ccc>
 
 #undef REQUIRE_PLUGIN
 #tryinclude <zombiereloaded>
@@ -26,8 +26,8 @@
 #define PLUGIN_PREFIX "{green}[Self-Mute]{default}"
 
 /* Please remove this when you compile the plugin, i did this because i dont have the include file */
-native bool IsClientTalking(int client);
-native void CCC_UpdateIgnoredArray(bool[] array);
+// native bool IsClientTalking(int client);
+// native void CCC_UpdateIgnoredArray(bool[] array);
 
 /* Other plugins library checking variables */
 bool g_Plugin_ccc;
@@ -1313,7 +1313,7 @@ void DB_Tables() {
 												... "`client_steamid` INTEGER NOT NULL," 
 												... "`mute_type` int(2) NOT NULL,"
 												... "`mute_duration` int(2) NOT NULL,"
-												... "UNIQUE KEY(`client_steamid`))");
+												... "UNIQUE(`client_steamid`))");
 																						
 		T_sqliteTables.AddQuery(query0);
 		
@@ -1326,7 +1326,7 @@ void DB_Tables() {
 												... "`target_steamid` INTEGER NOT NULL," 
 												... "`text_chat` int(2) NOT NULL,"
 												... "`voice_chat` int(2) NOT NULL,"
-												... "UNIQUE KEY(`client_steamid`, `target_steamid`))");
+												... "UNIQUE(`client_steamid`, `target_steamid`))");
 																						
 		T_sqliteTables.AddQuery(query1);
 	
@@ -1339,7 +1339,7 @@ void DB_Tables() {
 												... "`group_filter` varchar(20) NOT NULL,"
 												... "`text_chat` int(2) NOT NULL,"
 												... "`voice_chat` int(2) NOT NULL,"
-												... "UNIQUE KEY(`client_steamid`, `group_filter`))"); 
+												... "UNIQUE(`client_steamid`, `group_filter`))"); 
 												
 		T_sqliteTables.AddQuery(query2);
 		g_hDB.Execute(T_sqliteTables, DB_sqliteTablesOnSuccess, DB_sqliteTablesOnError, _, DBPrio_High);
