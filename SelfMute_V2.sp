@@ -836,7 +836,9 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 	#endif
 	
 	GroupFilter groupFilter = GROUP_MAX_NUM;
+	PrintToChatAll("Group to selfmute: %s", groupFilterC);
 	for (int i = 0; i < sizeof(g_sGroupsFilters); i++) {
+		PrintToChatAll("Found Group Filter: %s", g_sGroupsFilters[i]);
 		if (strcmp(groupFilterC, g_sGroupsFilters[i], false) == 0) {
 			groupFilter = view_as<GroupFilter>(i);
 			break;
