@@ -501,7 +501,7 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 	Menu menu = new Menu(Menu_ShowTargets);
 	
 	char title[50];
-	Format(title, sizeof(title), "%s - self-mute List", (muteTarget == MuteTarget_Client) ? "Players" : "Groups");
+	Format(title, sizeof(title), "%s - self-mute List | X = Muted", (muteTarget == MuteTarget_Client) ? "Players" : "Groups");
 	menu.SetTitle(title);
 					
 	bool found = false;
@@ -526,14 +526,14 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 					
 					MuteType checkMuteType = GetMuteType(g_bClientText[client][i], g_bClientVoice[client][i]);
 
-					FormatEx(itemText, sizeof(itemText), "(#%d) %s\nPermanent: %s\nVoice Chat: %s\nText Chat: %s",
+					FormatEx(itemText, sizeof(itemText), "(#%d) %s: Voice[%s] Text[%s] - %s",
 														userid,
 														g_PlayerData[i].name,
-														perma ? "Yes" : "No",
 														(checkMuteType == MuteType_All || checkMuteType == MuteType_Voice)
-														? "Muted" : "Not Muted",
+														? "X" : "",
 														(checkMuteType == MuteType_All || checkMuteType == MuteType_Text)
-														? "Muted" : "Not Muted");						
+														? "X" : "",
+														perma ? "Saved" : "Not Saved");						
 					menu.AddItem(itemInfo, itemText);
 					found = true;
 				}
@@ -551,13 +551,13 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 					char itemText[128];
 					MuteType checkMuteType = GetMuteType(g_bClientGroupText[client][i], g_bClientGroupVoice[client][i]);
 
-					FormatEx(itemText, sizeof(itemText), "%s\nPermanent: %s\nVoice Chat: %s\nText Chat: %s",
+					FormatEx(itemText, sizeof(itemText), "%s: Voice[%s] Text[%s] - %s",
 														g_sGroupsNames[i],
-														perma ? "Yes" : "No",
 														(checkMuteType == MuteType_All || checkMuteType == MuteType_Voice)
-														? "Muted" : "Not Muted",
+														? "X" : "",
 														(checkMuteType == MuteType_All || checkMuteType == MuteType_Text)
-														? "Muted" : "Not Muted");
+														? "X" : "",
+														perma ? "Saved" : "Not Saved");
 					menu.AddItem(itemInfo, itemText);	
 					found = true;
 				}
