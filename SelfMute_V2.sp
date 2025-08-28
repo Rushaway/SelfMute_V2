@@ -25,7 +25,7 @@
 
 #define PLUGIN_PREFIX "{green}[Self-Mute]{default}"
 
-// /* Please remove this when you compile the plugin, i did this because i dont have the include file */
+/* Please remove this when you compile the plugin, i did this because i dont have the include file */
 native bool IsClientTalking(int client);
 native void CCC_UpdateIgnoredArray(bool[] array);
 
@@ -156,7 +156,7 @@ public Plugin myinfo = {
 	name 			= "SelfMute V2",
 	author 			= "Dolly",
 	description 	= "Ignore other players in text and voicechat.",
-	version 		= "1.1.2",
+	version 		= "1.1.4",
 	url 			= ""
 };
 
@@ -1219,7 +1219,7 @@ void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast) {
 
 /* Database Setup */
 void ConnectToDB() {
-	Database.Connect(DB_OnConnect, "SelfMute");
+	Database.Connect(DB_OnConnect, "SelfMuteV2");
 }
 
 public void DB_OnConnect(Database db, const char[] error, any data) {
@@ -1308,12 +1308,12 @@ void DB_Tables() {
 		Transaction T_sqliteTables = SQL_CreateTransaction();
 		
 		char query0[1024];		
-		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_mute`("
+		g_hDB.Format(query0, sizeof(query0), "CREATE TABLE IF NOT EXISTS `clients_data`("
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_steamid` varchar(20) NOT NULL," 
 												... "`mute_type` int(2) NOT NULL,"
-												... "`mute_duration` int(2) NOT NULL"
-												...	"PRIMARY KEY(`id`))");
+												... "`mute_duration` int(2) NOT NULL,"
+												... "UNIQUE KEY(`client_steamid`))");
 																						
 		T_sqliteTables.AddQuery(query0);
 		
@@ -1338,7 +1338,7 @@ void DB_Tables() {
 												... "`group_name` varchar(32) NOT NULL," 
 												... "`group_filter` varchar(20) NOT NULL,"
 												... "`text_chat` int(2) NOT NULL,"
-												... "`voice_chat` int(2) NOT NULL)"
+												... "`voice_chat` int(2) NOT NULL,"
 												... "UNIQUE KEY(`client_steamid`, `group_filter`))"); 
 												
 		T_sqliteTables.AddQuery(query2);
@@ -1450,20 +1450,28 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 	}
 		
 	/* Now get mute list duh, get both the client as a client and as a target */
-	char query[200];
-	FormatEx(query, sizeof(query), "SELECT `target_name`, `target_steamid`, `text_chat`, `voice_chat` FROM `clients_mute` WHERE `client_steamid`='%s'", steamIDEscaped);
-	g_hDB.Query(DB_OnGetClientClientMutes, query, userid);
+	char query[512];
+	FormatEx(query, sizeof(query), 
+					"SELECT `target_name` AS `tar_name`, `target_steamid` AS `tar_id`,"
+				...	"`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
+				... "FROM `clients_mute` WHERE `client_steamid`='%s' "
+				... "UNION ALL "
+				... "SELECT `group_name` AS `tar_name`, `group_filter` AS `tar_id`,"
+				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
+				... "FROM `groups_mute` WHERE `client_steamid`='%s' "
+				... "UNION ALL "
+				... "SELECT \"\" AS `tar_name`, `client_steamid` AS `tar_id`,"
+				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
+				... "FROM `clients_mute` WHERE `target_steamid`='%s'",
+				steamIDEscaped, steamIDEscaped, steamIDEscaped
+	);
 	
-	FormatEx(query, sizeof(query), "SELECT `group_name`, `group_filter`, `text_chat`, `voice_chat` FROM `groups_mute` WHERE `client_steamid`='%s'", steamIDEscaped);
-	g_hDB.Query(DB_OnGetClientGroupMutes, query, userid);
-	
-	FormatEx(query, sizeof(query), "SELECT `client_steamid`, `text_chat`, `voice_chat` FROM `clients_mute` WHERE `target_steamid`='%s'", steamIDEscaped);
-	g_hDB.Query(DB_OnGetTargetClientMutes, query, userid);
+	g_hDB.Query(DB_OnGetClientTargets, query, userid);
 }
 
-void DB_OnGetClientClientMutes(Database db, DBResultSet results, const char[] error, int userid) {
+void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error, int userid) {
 	if (!results || error[0]) {
-		LogError("[Self-Mute] Error while getting client's client mutes, error: %s", error);
+		LogError("[Self-Mute] Error while getting client's client/target mutes, error: %s", error);
 		return;
 	}
 	
@@ -1471,8 +1479,8 @@ void DB_OnGetClientClientMutes(Database db, DBResultSet results, const char[] er
 		return;
 	}
 	
-	int client = GetClientOfUserId(userid);
-	if (!client) {
+	int desiredClient = GetClientOfUserId(userid);
+	if (!desiredClient) {
 		return;
 	}
 	
@@ -1480,89 +1488,34 @@ void DB_OnGetClientClientMutes(Database db, DBResultSet results, const char[] er
 		char targetName[32];
 		results.FetchString(0, targetName, sizeof(targetName));
 		
-		char targetSteamID[20];
-		results.FetchString(1, targetSteamID, sizeof(targetSteamID));
-
-		bool text = view_as<bool>(results.FetchInt(2));
-		bool voice = view_as<bool>(results.FetchInt(3));
-		MuteType muteType = GetMuteType(text, voice);
-		
-		SelfMute myMute;
-		myMute.AddMute(targetName, targetSteamID, muteType, MuteTarget_Client);
-		g_PlayerData[client].mutesList.PushArray(myMute);
-		
-		int target = GetClientBySteamID(targetSteamID);
-		if (target == -1) {
-			continue;
-		}
-		
-		ApplySelfMute(client, target, muteType);
-	}
-}
-
-void DB_OnGetClientGroupMutes(Database db, DBResultSet results, const char[] error, int userid) {
-	if (!results || error[0]) {
-		LogError("[Self-Mute] Error while getting client's group mutes, error: %s", error);
-		return;
-	}
-	
-	if (!results.RowCount) {
-		return;
-	}
-	
-	int client = GetClientOfUserId(userid);
-	if (!client) {
-		return;
-	}
-	
-	while(results.FetchRow()) {
-		char groupName[32];
-		results.FetchString(0, groupName, sizeof(groupName));
-		
-		char groupFilter[20];
-		results.FetchString(1, groupFilter, sizeof(groupFilter));
+		char targetID[20];
+		results.FetchString(1, targetID, sizeof(targetID));
 		
 		bool text = view_as<bool>(results.FetchInt(2));
 		bool voice = view_as<bool>(results.FetchInt(3));
 		MuteType muteType = GetMuteType(text, voice);
 		
-		SelfMute myMute;
-		myMute.AddMute(groupName, groupFilter, muteType, MuteTarget_Group);
-		g_PlayerData[client].mutesList.PushArray(myMute);
-		
-		ApplySelfMuteGroup(client, groupFilter, muteType);
-	}
-}
-
-void DB_OnGetTargetClientMutes(Database db, DBResultSet results, const char[] error, int userid) {
-	if (!results || error[0]) {
-		LogError("[Self-Mute] Error while getting target's client mutes, error: %s", error);
-		return;
-	}
-	
-	if (!results.RowCount) {
-		return;
-	}
-	
-	int target = GetClientOfUserId(userid);
-	if (!target) {
-		return;
-	}
-	
-	while(results.FetchRow()) {
-		char clientSteamID[20];
-		results.FetchString(0, clientSteamID, sizeof(clientSteamID));
-
-		bool text = view_as<bool>(results.FetchInt(1));
-		bool voice = view_as<bool>(results.FetchInt(2));
-		MuteType muteType = GetMuteType(text, voice);
-		
-		int client = GetClientBySteamID(clientSteamID);
-		if (client == -1) {
-			continue;
+		if (targetID[0] != '@') {
+			int target = GetClientBySteamID(targetID);
+			if (target == -1) {
+				continue;
+			}
+			
+			if (!targetName[0]) {
+				ApplySelfMute(target, desiredClient, muteType);
+			} else {
+				SelfMute myMute;
+				myMute.AddMute(targetName, targetID, muteType, MuteTarget_Client);
+				g_PlayerData[desiredClient].mutesList.PushArray(myMute);
+				ApplySelfMute(desiredClient, target, muteType);		
+			}
+		} else {
+			SelfMute myMute;
+			myMute.AddMute(targetName, targetID, muteType, MuteTarget_Group);
+			g_PlayerData[desiredClient].mutesList.PushArray(myMute);
+			
+			ApplySelfMuteGroup(desiredClient, targetID, muteType);
 		}
-		
-		ApplySelfMute(client, target, muteType);
 	}
 }
 
