@@ -22,13 +22,9 @@
 
 #pragma newdecls required
 
-#define DEBUG
+#define DB_NAME "SelfMuteV2"
 
 #define PLUGIN_PREFIX "{green}[Self-Mute]{default}"
-
-/* Please remove this when you compile the plugin, i did this because i dont have the include file */
-// native bool IsClientTalking(int client);
-// native void CCC_UpdateIgnoredArray(bool[] array);
 
 /* Other plugins library checking variables */
 bool g_Plugin_ccc;
@@ -1232,16 +1228,14 @@ void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast) {
 
 /* Database Setup */
 void ConnectToDB() {
-	Database.Connect(DB_OnConnect, "SelfMuteV2");
+	Database.Connect(DB_OnConnect, DB_NAME);
 }
 
 public void DB_OnConnect(Database db, const char[] error, any data) {
 	if (db == null || error[0]) {
 		/* Failure happen. Do retry with delay */
 		CreateTimer(15.0, DB_RetryConnection);
-		#if defined DEBUG
-			LogError("[Self-Mute] Couldn't connect to database `SelfMute`, retrying in 15 seconds. \nError: %s", error);
-		#endif
+		LogError("[Self-Mute] Couldn't connect to database `%s`, retrying in 15 seconds. \nError: %s", DB_NAME, error);
 		return;
 	}
 
@@ -1354,9 +1348,7 @@ void DB_Tables() {
 		T_sqliteTables.AddQuery(query2);
 		g_hDB.Execute(T_sqliteTables, DB_sqliteTablesOnSuccess, DB_sqliteTablesOnError, _, DBPrio_High);
 	} else {
-		#if defined DEBUG
 			LogError("[Self-Mute] Couldn't create tables for an unknown driver");
-		#endif
 		return;
 	}
 }
@@ -1369,9 +1361,7 @@ public void DB_mysqlTablesOnSuccess(Database database, any data, int queries, Ha
 
 public void DB_mysqlTablesOnError(Database database, any data, int queries, const char[] error, int failIndex, any[] queryData)
 {
-	#if defined DEBUG
-		LogError("[Self-Mute] Couldn't create tables for MYSQL, error: %s", error);
-	#endif
+	LogError("[Self-Mute] Couldn't create tables for MYSQL, error: %s", error);
 	return;
 }
 
@@ -1383,9 +1373,7 @@ public void DB_sqliteTablesOnSuccess(Database database, any data, int queries, H
 
 public void DB_sqliteTablesOnError(Database database, any data, int queries, const char[] error, int failIndex, any[] queryData)
 {
-	#if defined DEBUG
-		LogError("[Self-Mute] Couldn't create tables for SQLITE, error: %s", error);
-	#endif
+	LogError("[Self-Mute] Couldn't create tables for SQLITE, error: %s", error);
 	return;
 }
 
