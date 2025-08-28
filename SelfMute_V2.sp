@@ -147,8 +147,11 @@ enum struct SelfMute {
 	MuteType muteType;
 	MuteTarget muteTarget;
 	
-	void AddMute(char[] nameEx, char[] idEx, MuteType muteTypeEx, MuteTarget muteTargetEx) {
-		strcopy(this.name, sizeof(SelfMute::name), nameEx);
+	void AddMute(char[] nameEx = "", char[] idEx, MuteType muteTypeEx, MuteTarget muteTargetEx) {
+		if (muteTargetEx == MuteTarget_Client) {
+			strcopy(this.name, sizeof(SelfMute::name), nameEx);
+		}
+		
 		strcopy(this.id, sizeof(SelfMute::id), idEx);
 		this.muteType = muteTypeEx;
 		this.muteTarget = muteTargetEx;
@@ -1304,7 +1307,6 @@ void DB_Tables() {
 												... "`id` int(11) unsigned NOT NULL auto_increment," 
 												... "`client_name` varchar(32) NOT NULL," 
 												... "`client_steamid` bigint unsigned NOT NULL," 
-												... "`group_name` varchar(32) NOT NULL," 
 												... "`group_filter` varchar(20) NOT NULL," 
 												... "`text_chat` int(2) NOT NULL,"
 												... "`voice_chat` int(2) NOT NULL,"
@@ -1365,7 +1367,6 @@ void DB_Tables() {
 												... "`id` INTEGER PRIMARY KEY AUTOINCREMENT," 
 												... "`client_name` varchar(32) NOT NULL," 
 												... "`client_steamid` INTEGER NOT NULL," 
-												... "`group_name` varchar(32) NOT NULL," 
 												... "`group_filter` varchar(20) NOT NULL,"
 												... "`text_chat` int(2) NOT NULL,"
 												... "`voice_chat` int(2) NOT NULL,"
@@ -1489,7 +1490,7 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 				...	"`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
 				... "FROM `clients_mute` WHERE `client_steamid`=%d "
 				... "UNION ALL "
-				... "SELECT `group_name` AS `tar_name`, NULL AS `tar_id`, `group_filter` AS `grp_id`,"
+				... "SELECT NULL AS `tar_name`, NULL AS `tar_id`, `group_filter` AS `grp_id`,"
 				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
 				... "FROM `groups_mute` WHERE `client_steamid`=%d "
 				... "UNION ALL "
@@ -1522,9 +1523,6 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 	while(results.FetchRow()) {
 		CPrintToChatAll("Found row");
 		
-		char targetName[32];
-		results.FetchString(0, targetName, sizeof(targetName));
-		
 		bool isGroup = results.IsFieldNull(1);
 		
 		bool text = view_as<bool>(results.FetchInt(3));
@@ -1532,6 +1530,9 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		MuteType muteType = GetMuteType(text, voice);
 		
 		if (!isGroup) {
+			char targetName[32];
+			results.FetchString(0, targetName, sizeof(targetName));
+			
 			CPrintToChatAll("Mute is NOT group");
 			char steamIDStr[20];
 			IntToString(results.FetchInt(1), steamIDStr, sizeof(steamIDStr));
@@ -1558,7 +1559,7 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 			results.FetchString(2, groupFilter, sizeof(groupFilter));
 			
 			SelfMute myMute;
-			myMute.AddMute(targetName, groupFilter, muteType, MuteTarget_Group);
+			myMute.AddMute(_, groupFilter, muteType, MuteTarget_Group);
 			g_PlayerData[desiredClient].mutesList.PushArray(myMute);
 			
 			ApplySelfMuteGroup(desiredClient, groupFilter, muteType);
@@ -1811,11 +1812,9 @@ void SaveSelfMuteClient(int client, int target) {
 
 void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 	char clientName[sizeof(PlayerData::name) * 2 + 1];
-	char groupName[32 * 2 + 1];
 	char groupFilterC[20 * 2 + 1];
 	
 	if (!g_hDB.Escape(g_PlayerData[client].name, clientName, sizeof(clientName))
-		|| !g_hDB.Escape(g_sGroupsNames[view_as<int>(groupFilter)], groupName, sizeof(groupName))
 		|| !g_hDB.Escape(g_sGroupsFilters[view_as<int>(groupFilter)], groupFilterC, sizeof(groupFilterC))) {
 		return;
 	}
@@ -1827,19 +1826,19 @@ void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 	
 	char query[512];
 	if (!g_bSQLLite) {
-		FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
-										... "`text_chat`, `voice_chat`) VALUES ('%s', %d, '%s', '%s', %d, %d)"
+		FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_name`, `client_steamid`, `group_filter`,"
+										... "`text_chat`, `voice_chat`) VALUES ('%s', %d, '%s', %d, %d)"
 										... "ON DUPLICATE KEY UPDATE `client_name`='%s', `text_chat`=%d, `voice_chat`=%d",
-										clientName, clientSteamID, groupName,
+										clientName, clientSteamID,
 										groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
 										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]), 
 										clientName,
 										view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
 										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
 	} else {
-		FormatEx(query, sizeof(query), "REPLACE INTO `groups_mute` (`client_name`, `client_steamid`, `group_name`, `group_filter`,"
-										... "`text_chat`, `voice_chat`) VALUES ('%s', %d, '%s', '%s', %d, %d)",
-										clientName, clientSteamID, groupName,
+		FormatEx(query, sizeof(query), "REPLACE INTO `groups_mute` (`client_name`, `client_steamid`, `group_filter`,"
+										... "`text_chat`, `voice_chat`) VALUES ('%s', %d, '%s', %d, %d)",
+										clientName, clientSteamID,
 										groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
 										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
 	}
