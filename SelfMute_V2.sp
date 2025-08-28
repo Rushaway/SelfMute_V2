@@ -979,7 +979,7 @@ void StartSelfMute(int client, int target, MuteType muteType, MuteDuration muteD
 	switch(muteDuration) {
 		case MuteDuration_Temporary: {
 			if (IsClientAdmin(target)) {
-				PrintToChat(client, "You are using SelfMute on an admin, be careful!", target);
+				CPrintToChat(client, "You are using SelfMute on an admin, be careful!", target);
         		LogAction(client, target, "%L Self-Muted an admin. %L", client, target);
         	}
         	
