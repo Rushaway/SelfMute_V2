@@ -2077,11 +2077,9 @@ bool IsClientInGroup(int client, GroupFilter groupFilter) {
 		}
 		
 		default: {
-			return true;
+			return false;
 		}
 	}
-
-	return true;
 }
 
 int GetClientBySteamID(const char[] steamID) {
