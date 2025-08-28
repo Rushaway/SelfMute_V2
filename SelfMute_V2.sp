@@ -33,6 +33,9 @@
 bool g_Plugin_ccc;
 bool g_Plugin_zombiereloaded;
 
+/* Late Load */
+bool g_bLate;
+
 /* CCC ignoring variable */
 bool g_Ignored[(MAXPLAYERS + 1) * (MAXPLAYERS + 1)];
 
@@ -159,6 +162,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 	RegPluginLibrary("SelfMute");
 	CreateNative("SelfMute_GetTextSelfMute", Native_GetTextSelfMute);
 	CreateNative("SelfMute_GetVoiceSelfMute", Native_GetVoiceSelfMute);
+	g_bLate = late;
 	return APLRes_Success;
 }
 
@@ -223,6 +227,12 @@ public void OnPluginStart() {
 	HookUserMessage(msgSendAudio, Hook_UserMessageSendAudio, true);
 
 	/* Incase of a late load */
+	if (g_bLate) {
+		LateLoadClients();
+	}
+}
+
+void LateLoadClients() {
 	for (int i = 1; i <= MaxClients; i++) {
 		if (!IsClientConnected(i)) {
 			continue;
@@ -1229,7 +1239,10 @@ public void DB_OnConnect(Database db, const char[] error, any data) {
 	g_hDB = db;
 	DB_Tables();
 	g_hDB.SetCharset("utf8");
-
+	
+	if (g_bLate) {
+		LateLoadClients();
+	}
 }
 
 public Action DB_RetryConnection(Handle timer)
@@ -1397,9 +1410,6 @@ public void OnClientConnected(int client) {
 }
 
 public void OnClientPostAdminCheck(int client) {
-	if (g_hDB == null)
-		return;
-
 	if (IsFakeClient(client)) {
 		return;
 	}
@@ -1422,6 +1432,10 @@ public void OnClientPostAdminCheck(int client) {
 	MuteDuration muteDuration = view_as<MuteDuration>(g_cvDefaultMuteDurationSettings.IntValue);
 	
 	g_PlayerData[client].Setup(clientName, steamIDStr, muteType, muteDuration);
+	
+	if (g_hDB == null) {
+		return;
+	}
 	
 	char query[1024];
 	FormatEx(query, sizeof(query), "SELECT `mute_type`,`mute_duration` FROM `clients_data` WHERE `client_steamid`=%d", steamID);
