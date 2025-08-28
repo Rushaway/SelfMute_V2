@@ -1487,6 +1487,8 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		return;
 	}
 	
+	PrintToChat("DB_OnGetClientTargets callback");
+	
 	while(results.FetchRow()) {
 		PrintToChatAll("Found row");
 		
