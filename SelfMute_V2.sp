@@ -237,7 +237,9 @@ void LateLoadClients() {
 		if (!IsClientConnected(i)) {
 			continue;
 		}
-		
+
+        OnClientConnected(i);
+
 		if (IsClientAuthorized(i)) {
 			OnClientPostAdminCheck(i);
 		}
@@ -1299,22 +1301,22 @@ void DB_Tables() {
 														
 		T_mysqlTables.AddQuery(query0);
 	
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_client_steamid` ON `clients_data` (`client_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_client_steamid` ON `clients_data` (`client_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_clients_client_steamid` ON `clients_mute` (`client_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_clients_client_steamid` ON `clients_mute` (`client_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_clients_target_steamid` ON `clients_mute` (`target_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_clients_target_steamid` ON `clients_mute` (`target_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_groups_client_steamid` ON `groups_mute` (`client_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_groups_client_steamid` ON `groups_mute` (`client_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_both1` ON `clients_mute` (`client_steamid`, `target_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_both1` ON `clients_mute` (`client_steamid`, `target_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_both2` ON `groups_mute` (`client_steamid`, `group_filter`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_both2` ON `groups_mute` (`client_steamid`, `group_filter`)");
 											
 		T_mysqlTables.AddQuery(query0);
 		
