@@ -1686,8 +1686,9 @@ void DeleteMuteFromDatabase(int client, char[] id, MuteTarget muteTarget) {
 		return;
 	}
 	
-	if (muteTarget == MuteTarget_Group) {
-		FormatEx(id, 20, "'%s'", id);
+		char tempId[20];
+		strcopy(tempId, sizeof(tempId), id);
+		FormatEx(id, 20, "'%s'", tempId);
 	}
 	
 	char query[124];
