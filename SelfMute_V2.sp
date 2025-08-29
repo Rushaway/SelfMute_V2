@@ -42,6 +42,10 @@ bool g_bClientVoice[MAXPLAYERS + 1][MAXPLAYERS + 1];
 bool g_bClientGroupText[MAXPLAYERS + 1][view_as<int>(GROUP_MAX_NUM)];
 bool g_bClientGroupVoice[MAXPLAYERS + 1][view_as<int>(GROUP_MAX_NUM)];
 
+/* Permanent selfmute Boolean Variables */
+bool g_bClientTargetPerma[MAXPLAYERS + 1][MAXPLAYERS + 1];
+bool g_bClientGroupPerma[MAXPLAYERS + 1][view_as<int>(GROUP_MAX_NUM)];
+
 /* ProtoBuf bool */
 bool g_bIsProtoBuf = false;
 
@@ -110,7 +114,6 @@ enum struct PlayerData {
 	char steamID[20];
 	MuteType muteType;
 	MuteDuration muteDuration;
-	ArrayList mutesList;
 	bool addedToDB;
 
 	void Reset() {
@@ -118,7 +121,6 @@ enum struct PlayerData {
 		this.steamID[0] = '\0';
 		this.muteType = view_as<MuteType>(g_cvDefaultMuteTypeSettings.IntValue);
 		this.muteDuration = view_as<MuteDuration>(g_cvDefaultMuteDurationSettings.IntValue);
-		delete this.mutesList;
 		this.addedToDB = false;
 	}
 
@@ -127,7 +129,6 @@ enum struct PlayerData {
 		strcopy(this.steamID, sizeof(PlayerData::steamID), steamIDEx);
 		this.muteType = muteTypeEx;
 		this.muteDuration = muteDurationEx;
-		this.mutesList = new ArrayList(ByteCountToCells(1024));
 		this.addedToDB = false;
 	}
 }
@@ -511,7 +512,7 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 				}
 
 				if (g_bClientText[client][i] || g_bClientVoice[client][i]) {
-					bool perma = IsThisMutedPerma(client, g_PlayerData[i].steamID, muteTarget);
+					bool perma = IsThisMutedPerma(client, i);
 					int userid = GetClientUserId(i);
 
 					char itemInfo[12];
@@ -537,7 +538,7 @@ void ShowTargetsMenu(int client, MuteTarget muteTarget) {
 		case MuteTarget_Group: {
 			for (int i = 0; i < view_as<int>(GROUP_MAX_NUM); i++) {
 				if (g_bClientGroupText[client][i] || g_bClientGroupVoice[client][i]) {
-					bool perma = IsThisMutedPerma(client, g_sGroupsFilters[i], muteTarget);
+					bool perma = IsThisMutedPerma(client, _, g_sGroupsFilters[i]);
 
 					char itemInfo[22];
 					FormatEx(itemInfo, sizeof(itemInfo), "1|%s", g_sGroupsFilters[i]);
@@ -858,15 +859,14 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 	/* we need to check if this client has selfmuted this target before */
 	if ((g_bClientGroupText[client][view_as<int>(groupFilter)] && !g_bClientGroupVoice[client][view_as<int>(groupFilter)])
 		&& (muteType == MuteType_Voice || muteType == MuteType_All)) {
-
-		bool perma = IsThisMutedPerma(client, g_sGroupsFilters[view_as<int>(groupFilter)], MuteTarget_Group);
+		bool perma = IsThisMutedPerma(client, _, g_sGroupsFilters[view_as<int>(groupFilter)]);
 		muteDuration = (perma) ? MuteDuration_Permanent:MuteDuration_Temporary;
 		StartSelfMuteGroup(client, groupFilter, MuteType_Voice, muteDuration);
 		return;
 	}
 
 	if ((!g_bClientGroupText[client][view_as<int>(groupFilter)] && g_bClientGroupVoice[client][view_as<int>(groupFilter)]) && (muteType == MuteType_Text || muteType == MuteType_All)) {
-		bool perma = IsThisMutedPerma(client, g_sGroupsFilters[view_as<int>(groupFilter)], MuteTarget_Group);
+		bool perma = IsThisMutedPerma(client, _, g_sGroupsFilters[view_as<int>(groupFilter)]);
 		muteDuration = (perma) ? MuteDuration_Permanent:MuteDuration_Temporary;
 		StartSelfMuteGroup(client, groupFilter, MuteType_Text, muteDuration);
 		return;
@@ -902,14 +902,14 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 void HandleClientSelfMute(int client, int target, MuteType muteType, MuteDuration muteDuration) {
 	/* we need to check if this client has selfmuted this target before */
 	if ((g_bClientText[client][target] && !g_bClientVoice[client][target]) && (muteType == MuteType_Voice || muteType == MuteType_All)) {
-		bool perma = IsThisMutedPerma(client, g_PlayerData[target].steamID, MuteTarget_Client);
+		bool perma = IsThisMutedPerma(client, target);
 		muteDuration = (perma) ? MuteDuration_Permanent:MuteDuration_Temporary;
 		StartSelfMute(client, target, MuteType_Voice, muteDuration);
 		return;
 	}
 
 	if ((!g_bClientText[client][target] && g_bClientVoice[client][target]) && (muteType == MuteType_Text || muteType == MuteType_All)) {
-		bool perma = IsThisMutedPerma(client, g_PlayerData[target].steamID, MuteTarget_Client);
+		bool perma = IsThisMutedPerma(client, target);
 		muteDuration = (perma) ? MuteDuration_Permanent:MuteDuration_Temporary;
 		StartSelfMute(client, target, MuteType_Text, muteDuration);
 		return;
@@ -1444,23 +1444,24 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 
 	/*
 	* Now get mute list duh, get both the client as a client and as a target
-	* We will select 4 fields of each table, though not all fields are required, NULL will be given
-	* 0. `tar_id`			-> Target (player) steamID (int)
-	* 1. `grp_id`			-> Group Filter char (string)
-	* 2. `text_chat`		-> Target (player & group) Text Chat Status (tinyint or int(2))
-	* 3. `voice_chat`		-> Target (player & group) Voice Chat Status (tinyint or int(2))
+	* We will select 5 fields of each table, though not all fields are required, NULL will be given
+	* 0. `is_target`		-> if NULL given, then it means the specific part of query has the `client_steamid` as WHERE clause, `target_stemaid` otherwise
+	* 1. `tar_id`			-> Target (player) steamID (int)
+	* 2. `grp_id`			-> Group Filter char (string)
+	* 3. `text_chat`		-> Target (player & group) Text Chat Status (tinyint or int(2))
+	* 4. `voice_chat`		-> Target (player & group) Voice Chat Status (tinyint or int(2))
 	*/
 	char query[1024];
 	FormatEx(query, sizeof(query),
-					"SELECT `target_steamid` AS `tar_id`, NULL AS `grp_id`,"
+					"SELECT NULL AS `is_target`, `target_steamid` AS `tar_id`, NULL AS `grp_id`,"
 				...	"`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
 				... "FROM `clients_mute` WHERE `client_steamid`=%d "
 				... "UNION ALL "
-				... "SELECT NULL AS `tar_id`, `group_filter` AS `grp_id`,"
+				... "SELECT NULL AS `is_target`, NULL AS `tar_id`, `group_filter` AS `grp_id`,"
 				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
 				... "FROM `groups_mute` WHERE `client_steamid`=%d "
 				... "UNION ALL "
-				... "SELECT `client_steamid` AS `tar_id`, NULL AS `grp_id`,"
+				... "SELECT 1 AS `is_target`, `client_steamid` AS `tar_id`, NULL AS `grp_id`,"
 				... "`text_chat` AS `text_chat`, `voice_chat` AS `voice_chat` "
 				... "FROM `clients_mute` WHERE `target_steamid`=%d",
 				steamID, steamID, steamID
@@ -1485,53 +1486,47 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 	}
 
 	while(results.FetchRow()) {
-		bool isGroup = results.IsFieldNull(0);
+		bool isGroup = results.IsFieldNull(1);
 
-		bool text = view_as<bool>(results.FetchInt(2));
-		bool voice = view_as<bool>(results.FetchInt(3));
+		bool text = view_as<bool>(results.FetchInt(3));
+		bool voice = view_as<bool>(results.FetchInt(4));
 		MuteType muteType = GetMuteType(text, voice);
 
 		if (!isGroup) {
-			int targetSteamID = results.FetchInt(0);
+			int targetSteamID = results.FetchInt(1);
 			char steamIDStr[20];
 
 			// Special handling for SourceTV (SteamID = 0)
 			if (targetSteamID == 0) {
 				for (int i = 1; i <= MaxClients; i++) {
 					if (IsClientSourceTV(i)) {
-						SelfMute myMute;
-						myMute.AddMute(g_PlayerData[i].name, "Console", muteType, MuteTarget_Client);
-						g_PlayerData[desiredClient].mutesList.PushArray(myMute);
+						g_bClientTargetPerma[desiredClient][i] = true;
 						ApplySelfMute(desiredClient, i, muteType);
 						break;
 					}
 				}
 			} else {
 				IntToString(targetSteamID, steamIDStr, sizeof(steamIDStr));
-
+				
 				int target = GetClientBySteamID(steamIDStr);
 				if (target == -1) {
 					continue;
 				}
-
-				// Get target name from client data
-				char targetName[32];
-				if (target > 0 && target <= MaxClients) {
-					strcopy(targetName, sizeof(targetName), g_PlayerData[target].name);
+				
+				if (results.IsFieldNull(0)) { // desiredClient here is the client
+					g_bClientTargetPerma[desiredClient][target] = true;
+					ApplySelfMute(desiredClient, target, muteType);
+				} else { // desiredClient here is the target
+					g_bClientTargetPerma[target][desiredClient] = true;
+					ApplySelfMute(target, desiredClient, muteType);
 				}
-
-				SelfMute myMute;
-				myMute.AddMute(targetName, steamIDStr, muteType, MuteTarget_Client);
-				g_PlayerData[desiredClient].mutesList.PushArray(myMute);
-				ApplySelfMute(desiredClient, target, muteType);
 			}
 		} else {
 			char groupFilter[20];
-			results.FetchString(1, groupFilter, sizeof(groupFilter));
-
-			SelfMute myMute;
-			myMute.AddMute("", groupFilter, muteType, MuteTarget_Group);
-			g_PlayerData[desiredClient].mutesList.PushArray(myMute);
+			results.FetchString(2, groupFilter, sizeof(groupFilter));
+			
+			GroupFilter groupFilterInt = GetGroupFilterByChar(groupFilter);
+			g_bClientGroupPerma[desiredClient][view_as<int>(groupFilterInt)] = true;
 
 			ApplySelfMuteGroup(desiredClient, groupFilter, muteType);
 		}
@@ -1550,7 +1545,10 @@ public void OnClientDisconnect(int client) {
 		g_bClientVoice[i][client] = false;
 		g_bClientText[client][i] = false;
 		g_bClientVoice[client][i] = false;
-
+		
+		g_bClientTargetPerma[client][i] = false;
+		g_bClientTargetPerma[i][client] = false;
+		
 		SetIgnored(i, client, false);
 		SetIgnored(client, i, false);
 
@@ -1559,7 +1557,13 @@ public void OnClientDisconnect(int client) {
 			SetListenOverride(client, i, Listen_Yes);
 		}
 	}
-
+	
+	for (int i = 0; i < view_as<int>(GROUP_MAX_NUM); i++) {
+		g_bClientGroupText[client][i] = false;
+		g_bClientGroupVoice[client][i] = false;
+		g_bClientGroupPerma[client][i] = false;
+	}
+	
 	UpdateIgnored();
 }
 
@@ -1645,7 +1649,7 @@ void ApplySelfUnMute(int client, int target) {
 		g_bClientVoice[client][target] = false;
 	}
 
-	DeleteMuteFromDatabase(client, g_PlayerData[target].steamID, MuteTarget_Client);
+	DeleteMuteFromDatabase(client, target);
 }
 
 void ApplySelfUnMuteGroup(int client, GroupFilter groupFilter) {
@@ -1683,11 +1687,11 @@ void ApplySelfUnMuteGroup(int client, GroupFilter groupFilter) {
 		}
 	}
 
-	DeleteMuteFromDatabase(client, g_sGroupsFilters[target], MuteTarget_Group);
+	DeleteMuteFromDatabase(client, _, g_sGroupsFilters[target]);
 }
 
-void DeleteMuteFromDatabase(int client, const char[] id, MuteTarget muteTarget) {
-	if (!IsThisMutedPerma(client, id, muteTarget, true)) {
+void DeleteMuteFromDatabase(int client, int target = -1, const char[] groupFilterC = "") {
+	if (!IsThisMutedPerma(client, target, groupFilterC, true)) {
 		return;
 	}
 
@@ -1697,19 +1701,19 @@ void DeleteMuteFromDatabase(int client, const char[] id, MuteTarget muteTarget) 
 	}
 
 	char query[256];
-	if (muteTarget == MuteTarget_Client) {
+	if (target != -1) {
 		int targetSteamID;
-		if (strcmp(id, "Console") == 0) {
+		if (IsClientSourceTV(target)) {
 			targetSteamID = 0; // SourceTV
 		} else {
-			targetSteamID = StringToInt(id);
+			targetSteamID = StringToInt(g_PlayerData[target].steamID);
 		}
 
 		FormatEx(query, sizeof(query), "DELETE FROM `clients_mute` WHERE `client_steamid`=%d AND `target_steamid`=%d",
 			clientSteamID, targetSteamID);
 	} else {
 		char escapedGroupFilter[42];
-		if (!g_hDB.Escape(id, escapedGroupFilter, sizeof(escapedGroupFilter))) {
+		if (!g_hDB.Escape(groupFilterC, escapedGroupFilter, sizeof(escapedGroupFilter))) {
 			return;
 		}
 
@@ -1726,31 +1730,32 @@ void DB_OnRemove(Database db, DBResultSet results, const char[] error, any data)
 	}
 }
 
-bool IsThisMutedPerma(int client, const char[] id, MuteTarget muteTarget, bool remove = false) {
-	if (!g_PlayerData[client].mutesList) {
-		return false;
-	}
-
-	for (int i = 0; i < g_PlayerData[client].mutesList.Length; i++) {
-		SelfMute selfMute;
-		g_PlayerData[client].mutesList.GetArray(i, selfMute, sizeof(selfMute));
-
-		bool isMatch = false;
-		if (strcmp(id, "Console") == 0 && strcmp(selfMute.id, "Console") == 0) {
-			isMatch = true;
-		} else if (strcmp(id, selfMute.id) == 0) {
-			isMatch = true;
-		}
-
-		if (isMatch && muteTarget == selfMute.muteTarget) {
+bool IsThisMutedPerma(int client, int target = -1, const char[] groupFilterC = "", bool remove = false) {
+	/* For clients: */
+	if (target != -1) {
+		if (g_bClientTargetPerma[client][target]) {
 			if (remove) {
-				g_PlayerData[client].mutesList.Erase(i);
+				g_bClientTargetPerma[client][target] = false;
 			}
-
+			
 			return true;
 		}
+		
+		return false;
 	}
-
+	
+	/* For Groups: */
+	GroupFilter groupFilter = GetGroupFilterByChar(groupFilterC);
+	int index = view_as<int>(groupFilter);
+	
+	if (g_bClientGroupPerma[client][index]) {
+		if (remove) {
+			g_bClientGroupPerma[client][index] = false;
+		}
+		
+		return true;
+	}
+	
 	return false;
 }
 
@@ -1789,12 +1794,7 @@ void SaveSelfMuteClient(int client, int target) {
 
 	g_hDB.Query(DB_OnInsertData, query, _, DBPrio_High);
 
-	IsThisMutedPerma(client, g_PlayerData[target].steamID, MuteTarget_Client, true);
-	MuteType muteType = GetMuteType(g_bClientText[client][target], g_bClientVoice[client][target]);
-
-	SelfMute myMute;
-	myMute.AddMute(g_PlayerData[target].name, g_PlayerData[target].steamID, muteType, MuteTarget_Client);
-	g_PlayerData[client].mutesList.PushArray(myMute);
+	g_bClientTargetPerma[client][target] = true;
 }
 
 void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
@@ -1829,13 +1829,8 @@ void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 	}
 
 	g_hDB.Query(DB_OnInsertData, query, _, DBPrio_High);
-
-	IsThisMutedPerma(client, g_sGroupsFilters[view_as<int>(groupFilter)], MuteTarget_Group, true);
-	MuteType muteType = GetMuteType(g_bClientGroupText[client][view_as<int>(groupFilter)], g_bClientGroupVoice[client][view_as<int>(groupFilter)]);
-
-	SelfMute myMute;
-	myMute.AddMute(g_sGroupsNames[view_as<int>(groupFilter)], g_sGroupsFilters[view_as<int>(groupFilter)], muteType, MuteTarget_Group);
-	g_PlayerData[client].mutesList.PushArray(myMute);
+	
+	g_bClientGroupPerma[client][view_as<int>(groupFilter)] = true;
 }
 
 void DB_OnInsertData(Database db, DBResultSet results, const char[] error, any data) {
