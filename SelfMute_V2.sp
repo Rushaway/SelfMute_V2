@@ -1005,8 +1005,6 @@ void StartSelfMute(int client, int target, MuteType muteType, MuteDuration muteD
 			CPrintToChat(client, "You have {green}self-muted {olive}%N\n{default}Voice Chat: {olive}%s\n{default}Text Chat: {olive}%s", target,
 						(muteTypeEx==MuteType_Voice||muteTypeEx==MuteType_All)?"Yes":"No",
 						(muteTypeEx==MuteType_Text||muteTypeEx==MuteType_All)?"Yes":"No");
-
-
 		}
 
 		case MuteDuration_Permanent: {
@@ -1348,7 +1346,7 @@ void DB_Tables() {
 		T_sqliteTables.AddQuery(query2);
 		g_hDB.Execute(T_sqliteTables, DB_sqliteTablesOnSuccess, DB_sqliteTablesOnError, _, DBPrio_High);
 	} else {
-			LogError("[Self-Mute] Couldn't create tables for an unknown driver");
+			LogError("[Self-Mute] Couldn't create tables: unsupported database driver '%s'. Only 'mysql' and 'sqlite' are supported.", driver);
 		return;
 	}
 }
