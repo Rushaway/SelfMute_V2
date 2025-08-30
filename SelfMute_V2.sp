@@ -169,6 +169,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 	RegPluginLibrary("SelfMuteV2");
 	CreateNative("SelfMute_GetTextSelfMute", Native_GetTextSelfMute);
 	CreateNative("SelfMute_GetVoiceSelfMute", Native_GetVoiceSelfMute);
+	CreateNative("SelfMute_GetSelfMute", Native_GetSelfMute);
 	g_bLate = late;
 	return APLRes_Success;
 }
@@ -183,6 +184,12 @@ int Native_GetVoiceSelfMute(Handle plugin, int params) {
 	int client = GetNativeCell(1);
 	int target = GetNativeCell(2);
 	return g_bClientVoice[client][target];
+}
+
+int Native_GetSelfMute(Handle plugin, int params) {
+	int client = GetNativeCell(1);
+	int target = GetNativeCell(2);
+	return (g_bClientVoice[client][target] && g_bClientText[client][target]);
 }
 
 public void OnPluginStart() {
