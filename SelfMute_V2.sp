@@ -836,11 +836,11 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 				if (!IsClientTalking(i)) {
 					continue;
 				}
-				
+
 				found = true;
 				HandleClientSelfMute(client, i, MuteType_Voice, MuteDuration_Temporary);
 			}
-			
+
 			if (!found) {
 				CPrintToChat(client, "No player was found.");
 				return;
@@ -1514,12 +1514,12 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 				}
 			} else {
 				IntToString(targetSteamID, steamIDStr, sizeof(steamIDStr));
-				
+
 				int target = GetClientBySteamID(steamIDStr);
 				if (target == -1) {
 					continue;
 				}
-				
+
 				if (results.IsFieldNull(0)) { // desiredClient here is the client
 					g_bClientTargetPerma[desiredClient][target] = true;
 					ApplySelfMute(desiredClient, target, muteType);
@@ -1531,7 +1531,7 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 		} else {
 			char groupFilter[20];
 			results.FetchString(2, groupFilter, sizeof(groupFilter));
-			
+
 			GroupFilter groupFilterInt = GetGroupFilterByChar(groupFilter);
 			g_bClientGroupPerma[desiredClient][view_as<int>(groupFilterInt)] = true;
 
@@ -1552,10 +1552,10 @@ public void OnClientDisconnect(int client) {
 		g_bClientVoice[i][client] = false;
 		g_bClientText[client][i] = false;
 		g_bClientVoice[client][i] = false;
-		
+
 		g_bClientTargetPerma[client][i] = false;
 		g_bClientTargetPerma[i][client] = false;
-		
+
 		SetIgnored(i, client, false);
 		SetIgnored(client, i, false);
 
@@ -1564,13 +1564,13 @@ public void OnClientDisconnect(int client) {
 			SetListenOverride(client, i, Listen_Yes);
 		}
 	}
-	
+
 	for (int i = 0; i < view_as<int>(GROUP_MAX_NUM); i++) {
 		g_bClientGroupText[client][i] = false;
 		g_bClientGroupVoice[client][i] = false;
 		g_bClientGroupPerma[client][i] = false;
 	}
-	
+
 	UpdateIgnored();
 }
 
@@ -1744,25 +1744,25 @@ bool IsThisMutedPerma(int client, int target = -1, const char[] groupFilterC = "
 			if (remove) {
 				g_bClientTargetPerma[client][target] = false;
 			}
-			
+
 			return true;
 		}
-		
+
 		return false;
 	}
-	
+
 	/* For Groups: */
 	GroupFilter groupFilter = GetGroupFilterByChar(groupFilterC);
 	int index = view_as<int>(groupFilter);
-	
+
 	if (g_bClientGroupPerma[client][index]) {
 		if (remove) {
 			g_bClientGroupPerma[client][index] = false;
 		}
-		
+
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -1836,7 +1836,7 @@ void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 	}
 
 	g_hDB.Query(DB_OnInsertData, query, _, DBPrio_High);
-	
+
 	g_bClientGroupPerma[client][view_as<int>(groupFilter)] = true;
 }
 
