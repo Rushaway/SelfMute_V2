@@ -190,7 +190,7 @@ public void OnPluginStart() {
 	LoadTranslations("common.phrases");
 
 	/* ConVars */
-	g_cvDefaultMuteTypeSettings 		= CreateConVar("sm_selfmute_default_mute_type", "2", "[0 = Self-Mute Voice only | 1 = Self-Mute Text Only | 2 = Self-Mute Both]");
+	g_cvDefaultMuteTypeSettings 		= CreateConVar("sm_selfmute_default_mute_type", "3", "[0 = Self-Mute Voice only | 1 = Self-Mute Text Only | 2 = Self-Mute Both | 3 = Ask First]");
 	g_cvDefaultMuteDurationSettings = CreateConVar("sm_selfmute_default_mute_duration", "2", "[0 = Temporary, 1 = Permanent, 2 = Ask First]");
 
 	AutoExecConfig();
@@ -827,6 +827,7 @@ void HandleGroupSelfUnMute(int client, const char[] groupFilterC) {
 void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteType, MuteDuration muteDuration) {
 	#if defined _Voice_included
 		if (strcmp(groupFilterC, "@talking", false) == 0) {
+			bool found = false;
 			for (int i = 1; i <= MaxClients; i++) {
 				if (!IsClientInGame(i)) {
 					continue;
@@ -835,10 +836,16 @@ void HandleGroupSelfMute(int client, const char[] groupFilterC, MuteType muteTyp
 				if (!IsClientTalking(i)) {
 					continue;
 				}
-
-				g_bClientVoice[client][i] = true;
-				SetListenOverride(client, i, Listen_No);
+				
+				found = true;
+				HandleClientSelfMute(client, i, MuteType_Voice, MuteDuration_Temporary);
 			}
+			
+			if (!found) {
+				CPrintToChat(client, "No player was found.");
+				return;
+			}
+
 			return;
 		}
 	#endif
