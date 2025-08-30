@@ -161,12 +161,12 @@ public Plugin myinfo = {
 	name 			= "SelfMute V2",
 	author 			= "Dolly",
 	description 	= "Ignore other players in text and voicechat.",
-	version 		= "1.1.4",
+	version 		= "2.0.0",
 	url 			= ""
 };
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max) {
-	RegPluginLibrary("SelfMute");
+	RegPluginLibrary("SelfMuteV2");
 	CreateNative("SelfMute_GetTextSelfMute", Native_GetTextSelfMute);
 	CreateNative("SelfMute_GetVoiceSelfMute", Native_GetVoiceSelfMute);
 	g_bLate = late;
