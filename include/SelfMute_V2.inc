@@ -35,3 +35,23 @@ native bool SelfMute_GetVoiceSelfMute(int client, int target);
 * @return            True if selfmute was placed, False otherwise
 **/
 native bool SelfMute_GetSelfMute(int client, int target);
+
+public SharedPlugin __pl_SelfMuteV2 =
+{
+    name = "SelfMute",
+    file = "SelfMute.smx",
+#if defined REQUIRE_PLUGIN
+    required = 1
+#else
+    required = 0
+#endif
+}
+
+#if !defined REQUIRE_PLUGIN
+public void __pl_SelfMuteV2_SetNTVOptional()
+{
+    MarkNativeAsOptional("SelfMute_GetTextSelfMute");
+    MarkNativeAsOptional("SelfMute_GetVoiceSelfMute");
+    MarkNativeAsOptional("SelfMute_GetSelfMute");
+}
+#endif
