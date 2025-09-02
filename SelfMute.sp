@@ -213,6 +213,9 @@ public void OnPluginStart() {
 	RegConsoleCmd("sm_suall", Command_SelfUnMuteAll, "Unmute all clients/groups");
 	RegConsoleCmd("sm_smcookies", Command_SmCookies, "Choose the good cookie");
 
+	RegConsoleCmd("sm_psm", Command_PermaSelfMute, "Permanently mute a player");
+	RegConsoleCmd("sm_psu", Command_PermaSelfUnMute, "Permanently unmute a player");
+
 	/* Cookie Menu */
 	SetCookieMenuItem(CookieMenu_Handler, 0, "SelfMute Cookies");
 
@@ -461,6 +464,86 @@ Action Command_SelfUnMute(int client, int args) {
 	HandleSelfUnMute(client, target);
 	return Plugin_Handled;
 }
+
+Action Command_PermaSelfMute(int client, int args) {
+	if (!client) {
+		return Plugin_Handled;
+	}
+
+	if (!IsClientAuthorized(client)) {
+		CReplyToCommand(client, "You need to be authorized to use this command. Please rejoin.");
+		return Plugin_Handled;
+	}
+
+	char arg1[32];
+	GetCmdArg(1, arg1, sizeof(arg1));
+
+	if (!GetCmdArgs()) {
+		CPrintToChat(client, "Usage: !psm <playername>");
+		return Plugin_Handled;
+	}
+
+	int target = FindTarget(client, arg1, false, false);
+	if (target == -1) {
+		return Plugin_Handled;
+	}
+
+	if (target == client) {
+		CReplyToCommand(client, "Silly, you cannot mute yourself!");
+		return Plugin_Handled;
+	}
+
+	if (IsFakeClient(target) && !IsClientSourceTV(target)) {
+		CReplyToCommand(client, "You cannot target a bot.");
+		return Plugin_Handled;
+	}
+
+	HandleClientSelfMute(client, target, MuteType_All, MuteDuration_Permanent);
+	return Plugin_Handled;
+}
+
+Action Command_PermaSelfUnMute(int client, int args) {
+	if (!client) {
+		return Plugin_Handled;
+	}
+
+	if (!IsClientAuthorized(client)) {
+		CReplyToCommand(client, "You need to be authorized to use this command. Please rejoin.");
+		return Plugin_Handled;
+	}
+
+	char arg1[32];
+	GetCmdArg(1, arg1, sizeof(arg1));
+
+	if (!GetCmdArgs()) {
+		CPrintToChat(client, "Usage: !psu <playername>");
+		return Plugin_Handled;
+	}
+
+	int target = FindTarget(client, arg1, false, false);
+	if (target == -1) {
+		return Plugin_Handled;
+	}
+
+	if (target == client) {
+		CReplyToCommand(client, "Silly, you cannot un-mute yourself!");
+		return Plugin_Handled;
+	}
+
+	if (!g_bClientText[client][target] && !g_bClientVoice[client][target]) {
+		CReplyToCommand(client, "You do not have this player permanently self-muted.");
+		return Plugin_Handled;
+	}
+
+	if (!g_bClientTargetPerma[client][target]) {
+		CReplyToCommand(client, "You do not have this player permanently self-muted. Use !su to unmute temporary mutes.");
+		return Plugin_Handled;
+	}
+
+	HandleSelfUnMute(client, target);
+	return Plugin_Handled;
+}
+
 
 void HandleSelfUnMute(int client, int target) {
 	ApplySelfUnMute(client, target);
