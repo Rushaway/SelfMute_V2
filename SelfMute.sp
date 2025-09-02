@@ -1577,7 +1577,7 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 	}
 
 	int desiredClient = GetClientOfUserId(userid);
-	if (!desiredClient) {
+	if (!desiredClient || !IsClientInGame(desiredClient)) {
 		return;
 	}
 
@@ -1595,6 +1595,9 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 			// Special handling for SourceTV (SteamID = 0)
 			if (targetSteamID == 0) {
 				for (int i = 1; i <= MaxClients; i++) {
+					if (!IsClientConnected(i)) {
+						continue;
+					}
 					if (IsClientSourceTV(i)) {
 						g_bClientTargetPerma[desiredClient][i] = true;
 						ApplySelfMute(desiredClient, i, muteType);
@@ -1879,10 +1882,10 @@ void SaveSelfMuteClient(int client, int target) {
 										view_as<int>(g_bClientText[client][target]),
 										view_as<int>(g_bClientVoice[client][target]));
 	} else {
-		FormatEx(query, sizeof(query), "INSERT INTO `clients_mute` (`client_steamid`, `target_steamid`,"
-										... "`text_chat`, `voice_chat`) VALUES (%d, %d, %d, %d)"
-										... "ON CONFLICT(`client_steamid`, `target_steamid`) DO UPDATE SET "
-										... "`text_chat`=excluded.`text_chat`, `voice_chat`=excluded.`voice_chat`",
+		FormatEx(query, sizeof(query), "INSERT INTO clients_mute (client_steamid, target_steamid,"
+										... "text_chat, voice_chat) VALUES (%d, %d, %d, %d)"
+										... " ON CONFLICT(client_steamid, target_steamid) DO UPDATE SET "
+										... "text_chat=excluded.text_chat, voice_chat=excluded.voice_chat",
 										clientSteamID, targetSteamID,
 										view_as<int>(g_bClientText[client][target]),
 										view_as<int>(g_bClientVoice[client][target]));
@@ -1915,10 +1918,10 @@ void SaveSelfMuteGroup(int client, GroupFilter groupFilter) {
 										groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
 										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
 	} else {
-		FormatEx(query, sizeof(query), "INSERT INTO `groups_mute` (`client_steamid`, `group_filter`,"
-										... "`text_chat`, `voice_chat`) VALUES (%d, '%s', %d, %d)"
-										... "ON CONFLICT(`client_steamid`, `group_filter`) DO UPDATE SET "
-										... "`text_chat`=excluded.`text_chat`, `voice_chat`=excluded.`voice_chat`",
+		FormatEx(query, sizeof(query), "INSERT INTO groups_mute (client_steamid, group_filter,"
+										... "text_chat, voice_chat) VALUES (%d, '%s', %d, %d)"
+										... " ON CONFLICT(client_steamid, group_filter) DO UPDATE SET "
+										... "text_chat=excluded.text_chat, voice_chat=excluded.voice_chat",
 										clientSteamID,
 										groupFilterC, view_as<int>(g_bClientGroupText[client][view_as<int>(groupFilter)]),
 										view_as<int>(g_bClientGroupVoice[client][view_as<int>(groupFilter)]));
@@ -1956,11 +1959,11 @@ void DB_UpdateClientData(int client, int mode) {
 											view_as<int>(g_PlayerData[client].muteType),
 											view_as<int>(g_PlayerData[client].muteDuration));
 		} else {
-			FormatEx(query, sizeof(query), "INSERT INTO `clients_data` ("
-											... "`client_steamid`, `mute_type`, `mute_duration`)"
-											... "VALUES (%d, %d, %d)"
-											... "ON CONFLICT(`client_steamid`) DO UPDATE SET "
-											... "`mute_type`=excluded.`mute_type`, `mute_duration`=excluded.`mute_duration`",
+			FormatEx(query, sizeof(query), "INSERT INTO clients_data ("
+											... "client_steamid, mute_type, mute_duration)"
+											... " VALUES (%d, %d, %d)"
+											... " ON CONFLICT(client_steamid) DO UPDATE SET "
+											... " mute_type=excluded.mute_type, mute_duration=excluded.mute_duration",
 											steamID,
 											view_as<int>(g_PlayerData[client].muteType),
 											view_as<int>(g_PlayerData[client].muteDuration));
