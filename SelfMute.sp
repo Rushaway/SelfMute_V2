@@ -1075,7 +1075,6 @@ int Menu_ShowMuteType(Menu menu, MenuAction action, int param1, int param2) {
 
 			int target = GetClientOfUserId(StringToInt(data[1]));
 			if (!target) {
-				CPrintToChat(param1, "Userid: %s", data[1]);
 				CPrintToChat(param1, "Player is no longer available.");
 				return -1;
 			}
