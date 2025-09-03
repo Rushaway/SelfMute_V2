@@ -161,7 +161,7 @@ public Plugin myinfo = {
 	name 			= "SelfMute V2",
 	author 			= "Dolly",
 	description 	= "Ignore other players in text and voicechat.",
-	version 		= "2.0.0",
+	version 		= "2.0.2",
 	url 			= ""
 };
 
@@ -475,14 +475,20 @@ Action Command_PermaSelfMute(int client, int args) {
 		return Plugin_Handled;
 	}
 
-	char arg1[32];
-	GetCmdArg(1, arg1, sizeof(arg1));
-
 	if (!GetCmdArgs()) {
-		CPrintToChat(client, "Usage: !psm <playername>");
+		ShowSelfMuteTargetsMenu(client);
+		CReplyToCommand(client, "Usage: !psm <playername | @group>");
 		return Plugin_Handled;
 	}
-
+	
+	char arg1[32];
+	GetCmdArg(1, arg1, sizeof(arg1));
+	
+	if (arg1[0] == '@') {
+		HandleGroupSelfMute(client, arg1, MuteType_All, MuteDuration_Permanent);
+		return Plugin_Handled;
+	}
+	
 	int target = FindTarget(client, arg1, false, false);
 	if (target == -1) {
 		return Plugin_Handled;
@@ -511,15 +517,21 @@ Action Command_PermaSelfUnMute(int client, int args) {
 		CReplyToCommand(client, "You need to be authorized to use this command. Please rejoin.");
 		return Plugin_Handled;
 	}
-
-	char arg1[32];
-	GetCmdArg(1, arg1, sizeof(arg1));
-
+	
 	if (!GetCmdArgs()) {
-		CPrintToChat(client, "Usage: !psu <playername>");
+		OpenSelfMuteMenu(client);
+		CReplyToCommand(client, "Usage: !psu <playername|@group>");
 		return Plugin_Handled;
 	}
-
+	
+	char arg1[32];
+	GetCmdArg(1, arg1, sizeof(arg1));
+	
+	if (arg1[0] == '@') {
+		HandleGroupSelfUnMute(client, arg1);
+		return Plugin_Handled;
+	}
+	
 	int target = FindTarget(client, arg1, false, false);
 	if (target == -1) {
 		return Plugin_Handled;
@@ -708,13 +720,13 @@ Action Command_SelfMute(int client, int args) {
 		return Plugin_Handled;
 	}
 
-	char arg1[32];
-	GetCmdArg(1, arg1, sizeof(arg1));
-
 	if (!GetCmdArgs()) {
 		ShowSelfMuteTargetsMenu(client);
 		return Plugin_Handled;
 	}
+	
+	char arg1[32];
+	GetCmdArg(1, arg1, sizeof(arg1));
 
 	if (arg1[0] == '@') {
 		HandleGroupSelfMute(client, arg1, g_PlayerData[client].muteType, g_PlayerData[client].muteDuration);
@@ -2238,7 +2250,7 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle bf, const int[] p
 	g_MsgPlayersNum = 0;
 	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
-		if (client != g_MsgClient && !(GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No))
+		if (!(GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No))
 			g_MsgPlayers[g_MsgPlayersNum++] = client;
 	}
 
