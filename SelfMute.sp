@@ -2226,24 +2226,26 @@ char g_MsgRadioSound[256];
 int g_MsgPlayersNum;
 int g_MsgPlayers[MAXPLAYERS + 1];
 
-public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle bf, const int[] players, int playersNum, bool reliable, bool init) {
+public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
 	if (g_bIsProtoBuf) {
-		g_MsgDest = PbReadInt(bf, "msg_dst");
-		g_MsgClient = PbReadInt(bf, "client");
-		PbReadString(bf, "msg_name", g_MsgName, sizeof(g_MsgName));
-		PbReadString(bf, "params", g_MsgParam1, sizeof(g_MsgParam1), 0);
-		PbReadString(bf, "params", g_MsgParam2, sizeof(g_MsgParam2), 1);
-		PbReadString(bf, "params", g_MsgParam3, sizeof(g_MsgParam3), 2);
-		PbReadString(bf, "params", g_MsgParam4, sizeof(g_MsgParam4), 3);
+		Protobuf pb = UserMessageToProtobuf(userMessage);
+		g_MsgDest = pb.ReadInt("msg_dst");
+		g_MsgClient = pb.ReadInt("client");
+		pb.ReadString("msg_name", g_MsgName, sizeof(g_MsgName));
+		pb.ReadString("params", g_MsgParam1, sizeof(g_MsgParam1), 0);
+		pb.ReadString("params", g_MsgParam2, sizeof(g_MsgParam2), 1);
+		pb.ReadString("params", g_MsgParam3, sizeof(g_MsgParam3), 2);
+		pb.ReadString("params", g_MsgParam4, sizeof(g_MsgParam4), 3);
 	}
 	else {
-		g_MsgDest = BfReadByte(bf);
-		g_MsgClient = BfReadByte(bf);
-		BfReadString(bf, g_MsgName, sizeof(g_MsgName), false);
-		BfReadString(bf, g_MsgParam1, sizeof(g_MsgParam1), false);
-		BfReadString(bf, g_MsgParam2, sizeof(g_MsgParam2), false);
-		BfReadString(bf, g_MsgParam3, sizeof(g_MsgParam3), false);
-		BfReadString(bf, g_MsgParam4, sizeof(g_MsgParam4), false);
+		BfRead bf = UserMessageToBfRead(userMessage);
+		g_MsgDest = bf.ReadByte();
+		g_MsgClient = bf.ReadByte();
+		bf.ReadString(g_MsgName, sizeof(g_MsgName), false);
+		bf.ReadString(g_MsgParam1, sizeof(g_MsgParam1), false);
+		bf.ReadString(g_MsgParam2, sizeof(g_MsgParam2), false);
+		bf.ReadString(g_MsgParam3, sizeof(g_MsgParam3), false);
+		bf.ReadString(g_MsgParam4, sizeof(g_MsgParam4), false);
 	}
 
 	// Check which clients need to be excluded.
@@ -2266,7 +2268,7 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle bf, const int[] p
 	return Plugin_Handled;
 }
 
-public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle bf, const int[] players, int playersNum, bool reliable, bool init) {
+public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
 	if (g_MsgClient == -1) {
 		return Plugin_Continue;
 	} else if (g_MsgClient == -2) {
@@ -2274,9 +2276,9 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle bf, const int[] p
 	}
 
 	if (g_bIsProtoBuf) {
-		PbReadString(bf, "radio_sound", g_MsgRadioSound, sizeof(g_MsgRadioSound));
+		UserMessageToProtobuf(userMessage).ReadString("radio_sound", g_MsgRadioSound, sizeof(g_MsgRadioSound));
 	} else {
-		BfReadString(bf, g_MsgRadioSound, sizeof(g_MsgRadioSound), false);
+		UserMessageToBfRead(userMessage).ReadString(g_MsgRadioSound, sizeof(g_MsgRadioSound), false);
 	}
 
 	if (strcmp(g_MsgRadioSound, "radio.locknload") == 0) {
@@ -2328,30 +2330,32 @@ public void OnPlayerRadio(DataPack pack)
 
 	Handle RadioText = StartMessage("RadioText", g_MsgPlayers, playersNum, USERMSG_RELIABLE);
 	if (g_bIsProtoBuf) {
-		PbSetInt(RadioText, "msg_dst", g_MsgDest);
-		PbSetInt(RadioText, "client", g_MsgClient);
-		PbSetString(RadioText, "msg_name", g_MsgName);
-		PbSetString(RadioText, "params", g_MsgParam1, 0);
-		PbSetString(RadioText, "params", g_MsgParam2, 1);
-		PbSetString(RadioText, "params", g_MsgParam3, 2);
-		PbSetString(RadioText, "params", g_MsgParam4, 3);
+		Protobuf pb = UserMessageToProtobuf(RadioText);
+		pb.SetInt("msg_dst", g_MsgDest);
+		pb.SetInt("client", g_MsgClient);
+		pb.SetString("msg_name", g_MsgName);
+		pb.SetString("params", g_MsgParam1, 0);
+		pb.SetString("params", g_MsgParam2, 1);
+		pb.SetString("params", g_MsgParam3, 2);
+		pb.SetString("params", g_MsgParam4, 3);
 	} else {
-		BfWriteByte(RadioText, g_MsgDest);
-		BfWriteByte(RadioText, g_MsgClient);
-		BfWriteString(RadioText, g_MsgName);
-		BfWriteString(RadioText, g_MsgParam1);
-		BfWriteString(RadioText, g_MsgParam2);
-		BfWriteString(RadioText, g_MsgParam3);
-		BfWriteString(RadioText, g_MsgParam4);
+		BfWrite bf = UserMessageToBfWrite(RadioText);
+		bf.WriteByte(g_MsgDest);
+		bf.WriteByte(g_MsgClient);
+		bf.WriteString(g_MsgName);
+		bf.WriteString(g_MsgParam1);
+		bf.WriteString(g_MsgParam2);
+		bf.WriteString(g_MsgParam3);
+		bf.WriteString(g_MsgParam4);
 	}
 
 	EndMessage();
 
 	Handle SendAudio = StartMessage("SendAudio", g_MsgPlayers, playersNum, USERMSG_RELIABLE);
 	if (g_bIsProtoBuf) {
-		PbSetString(SendAudio, "radio_sound", g_MsgRadioSound);
+		UserMessageToProtobuf(SendAudio).SetString("radio_sound", g_MsgRadioSound);
 	} else {
-		BfWriteString(SendAudio, g_MsgRadioSound);
+		UserMessageToBfWrite(SendAudio).WriteString(g_MsgRadioSound);
 	}
 	EndMessage();
 }
