@@ -2325,7 +2325,8 @@ public void OnPlayerRadio(DataPack pack)
 	for (int i = 0; i < g_MsgPlayersNum; i++) {
 		int client_ = pack.ReadCell();
 		if (IsClientInGame(client_)) {
-			g_MsgPlayers[playersNum++] = client_;
+			g_MsgPlayers[playersNum] = client_;
+			playersNum++;
 		}
 	}
 
