@@ -2253,7 +2253,10 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
 		if (!(GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No))
-			g_MsgPlayers[g_MsgPlayersNum++] = client;
+		{
+			g_MsgPlayers[g_MsgPlayersNum] = client;
+			g_MsgPlayersNum++;
+		}
 	}
 
 	// No clients were excluded.
