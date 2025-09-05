@@ -264,7 +264,7 @@ void LateLoadClients() {
 }
 
 Action Command_SmCookies(int client, int args) {
-	if (!client) {
+	if (!client || !IsClientAuthorized(client)) {
 		return Plugin_Handled;
 	}
 
@@ -2215,60 +2215,125 @@ int GetClientBySteamID(const char[] steamID) {
 }
 
 /* Thanks to Botox Original Self-Mute plugin for the radio commands part */
-int g_MsgDest;
-int g_MsgClient;
-char g_MsgName[256];
-char g_MsgParam1[256];
-char g_MsgParam2[256];
-char g_MsgParam3[256];
-char g_MsgParam4[256];
-char g_MsgRadioSound[256];
-int g_MsgPlayersNum;
-int g_MsgPlayers[MAXPLAYERS + 1];
+int g_MsgClient = -1;
 
 public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
+	int msg_dst;
+	char msg_name[256];
+	char msg_params[4][256];
+
 	if (g_bIsProtoBuf) {
 		Protobuf pb = UserMessageToProtobuf(userMessage);
-		g_MsgDest = pb.ReadInt("msg_dst");
+		msg_dst = pb.ReadInt("msg_dst");
 		g_MsgClient = pb.ReadInt("client");
-		pb.ReadString("msg_name", g_MsgName, sizeof(g_MsgName));
-		pb.ReadString("params", g_MsgParam1, sizeof(g_MsgParam1), 0);
-		pb.ReadString("params", g_MsgParam2, sizeof(g_MsgParam2), 1);
-		pb.ReadString("params", g_MsgParam3, sizeof(g_MsgParam3), 2);
-		pb.ReadString("params", g_MsgParam4, sizeof(g_MsgParam4), 3);
+		pb.ReadString("msg_name", msg_name, sizeof(msg_name));
+		for (int i = 0; i < 4; i++) {
+			pb.ReadString("params", msg_params[i], sizeof(msg_params[]), i);
+		}
 	}
 	else {
 		BfRead bf = UserMessageToBfRead(userMessage);
-		g_MsgDest = bf.ReadByte();
+		msg_dst = bf.ReadByte();
 		g_MsgClient = bf.ReadByte();
-		bf.ReadString(g_MsgName, sizeof(g_MsgName), false);
-		bf.ReadString(g_MsgParam1, sizeof(g_MsgParam1), false);
-		bf.ReadString(g_MsgParam2, sizeof(g_MsgParam2), false);
-		bf.ReadString(g_MsgParam3, sizeof(g_MsgParam3), false);
-		bf.ReadString(g_MsgParam4, sizeof(g_MsgParam4), false);
+		bf.ReadString(msg_name, sizeof(msg_name), false);
+		for (int i = 0; i < 4; i++) {
+			bf.ReadString(msg_params[i], sizeof(msg_params[]), false);
+		}
 	}
-
+	
 	// Check which clients need to be excluded.
-	g_MsgPlayersNum = 0;
+	int newPlayersNum = 0;
+	int newPlayers[MAXPLAYERS + 1];
+	
 	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
 		if (!(GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No))
 		{
-			g_MsgPlayers[g_MsgPlayersNum] = client;
-			g_MsgPlayersNum++;
+			newPlayers[newPlayersNum] = client;
+			newPlayersNum++;
 		}
 	}
-
+	
 	// No clients were excluded.
-	if (g_MsgPlayersNum == playersNum) {
+	if (newPlayersNum == playersNum) {
 		g_MsgClient = -1;
 		return Plugin_Continue;
-	} else if (g_MsgPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
+	} else if (newPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
 		g_MsgClient = -2;
 		return Plugin_Handled;
 	}
-
+	
+	DataPack pack = new DataPack();
+	pack.WriteCell(msg_dst);
+	pack.WriteString(msg_name);
+	for (int i = 0; i < 4; i++) {
+		pack.WriteString(msg_params[i]);
+	}
+	
+	pack.WriteCell(newPlayersNum);
+	
+	for (int i = 0; i < newPlayersNum; i++) {
+		pack.WriteCell(newPlayers[i]);
+	}
+	
+	RequestFrame(OnPlayerRadioText, pack);
 	return Plugin_Handled;
+}
+
+void OnPlayerRadioText(DataPack pack) {
+	if (!IsClientInGame(g_MsgClient)) {
+		delete pack;
+		return;
+	}
+	
+	int msg_dst;
+	char msg_name[256];
+	char msg_params[4][256];
+
+	pack.Reset();
+	
+	msg_dst = pack.ReadCell();
+	pack.ReadString(msg_name, sizeof(msg_name));
+	for (int i = 0; i < 4; i++) {
+		pack.ReadString(msg_params[i], sizeof(msg_params[]));
+	}
+	
+	int newPlayersNum = pack.ReadCell();
+	int[] newPlayers = new int[newPlayersNum];
+	
+	int newPlayersNum2 = 0;
+	for (int i = 0; i < newPlayersNum; i++) {
+		int client = pack.ReadCell();
+		if (IsClientInGame(client)) {
+			newPlayers[newPlayersNum2] = client;
+			newPlayersNum2++;
+		}
+	}
+	
+	delete pack;
+	
+	Handle RadioText = StartMessage("RadioText", newPlayers, newPlayersNum2, USERMSG_RELIABLE);
+	if (g_bIsProtoBuf) {
+		Protobuf pb = UserMessageToProtobuf(RadioText);
+		pb.SetInt("msg_dst", msg_dst);
+		pb.SetInt("client", g_MsgClient);
+		pb.SetString("msg_name", msg_name);
+		for (int i = 0; i < 4; i++) {
+			pb.SetString("params", msg_params[i], i);
+		}
+	} else {
+		BfWrite bf = UserMessageToBfWrite(RadioText);
+		bf.WriteByte(msg_dst);
+		bf.WriteByte(g_MsgClient);
+		bf.WriteString(msg_name);
+		for (int i = 0; i < 4; i++) {
+			bf.WriteString(msg_params[i]);
+		}
+	}
+
+	EndMessage();
+	
+	g_MsgClient = -1;
 }
 
 public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
@@ -2278,88 +2343,84 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 		return Plugin_Handled;
 	}
 
+	char radioSound[256];
 	if (g_bIsProtoBuf) {
-		UserMessageToProtobuf(userMessage).ReadString("radio_sound", g_MsgRadioSound, sizeof(g_MsgRadioSound));
+		UserMessageToProtobuf(userMessage).ReadString("radio_sound", radioSound, sizeof(radioSound));
 	} else {
-		UserMessageToBfRead(userMessage).ReadString(g_MsgRadioSound, sizeof(g_MsgRadioSound), false);
+		UserMessageToBfRead(userMessage).ReadString(radioSound, sizeof(radioSound), false);
 	}
 
-	if (strcmp(g_MsgRadioSound, "radio.locknload") == 0) {
+	if (strcmp(radioSound, "radio.locknload") == 0) {
 		return Plugin_Continue;
 	}
-
-	DataPack pack = new DataPack();
-	pack.WriteCell(g_MsgDest);
-	pack.WriteCell(g_MsgClient);
-	pack.WriteString(g_MsgName);
-	pack.WriteString(g_MsgParam1);
-	pack.WriteString(g_MsgParam2);
-	pack.WriteString(g_MsgParam3);
-	pack.WriteString(g_MsgParam4);
-	pack.WriteString(g_MsgRadioSound);
-	pack.WriteCell(g_MsgPlayersNum);
-
-	for (int i = 0; i < g_MsgPlayersNum; i++) {
-		pack.WriteCell(g_MsgPlayers[i]);
+	
+	// Check which clients need to be excluded.
+	int newPlayersNum = 0;
+	int newPlayers[MAXPLAYERS + 1];
+	
+	for (int i = 0; i < playersNum; i++) {
+		int client = players[i];
+		if (!(GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No))
+		{
+			newPlayers[newPlayersNum] = client;
+			newPlayersNum++;
+		}
 	}
-
+	
+	if (newPlayersNum == playersNum) {
+		return Plugin_Continue;
+	} else if (newPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
+		return Plugin_Handled;
+	}
+	
+	DataPack pack = new DataPack();
+	
+	pack.WriteCell(g_MsgClient);
+	pack.WriteString(radioSound);
+	pack.WriteCell(newPlayersNum);
+	for (int i = 0; i < newPlayersNum; i++) {
+		pack.WriteCell(newPlayers[i]);
+	}
+	
+	g_MsgClient = -1;
+	
 	RequestFrame(OnPlayerRadio, pack);
 
 	return Plugin_Handled;
 }
 
-public void OnPlayerRadio(DataPack pack)
-{
+void OnPlayerRadio(DataPack pack) {
 	pack.Reset();
-	g_MsgDest = pack.ReadCell();
-	g_MsgClient = pack.ReadCell();
-	pack.ReadString(g_MsgName, sizeof(g_MsgName));
-	pack.ReadString(g_MsgParam1, sizeof(g_MsgParam1));
-	pack.ReadString(g_MsgParam2, sizeof(g_MsgParam2));
-	pack.ReadString(g_MsgParam3, sizeof(g_MsgParam3));
-	pack.ReadString(g_MsgParam4, sizeof(g_MsgParam4));
-	pack.ReadString(g_MsgRadioSound, sizeof(g_MsgRadioSound));
-	g_MsgPlayersNum = pack.ReadCell();
-
-	int playersNum = 0;
-	for (int i = 0; i < g_MsgPlayersNum; i++) {
-		int client_ = pack.ReadCell();
-		if (IsClientInGame(client_)) {
-			g_MsgPlayers[playersNum] = client_;
-			playersNum++;
+	
+	int msg_client = pack.ReadCell();
+	if (!IsClientInGame(msg_client)) {
+		delete pack;
+		return;
+	}
+	
+	char radioSound[256];
+	pack.ReadString(radioSound, sizeof(radioSound));
+	
+	int newPlayersNum = pack.ReadCell();
+	int[] newPlayers = new int[newPlayersNum];
+	
+	int newPlayersNum2 = 0;
+	for (int i = 0; i < newPlayersNum; i++) {
+		int client = pack.ReadCell();
+		if (IsClientInGame(client)) {
+			newPlayers[newPlayersNum2] = client;
+			newPlayersNum2++;
 		}
 	}
-
+	
 	delete pack;
-
-	Handle RadioText = StartMessage("RadioText", g_MsgPlayers, playersNum, USERMSG_RELIABLE);
+	
+	Handle SendAudio = StartMessage("SendAudio", newPlayers, newPlayersNum2, USERMSG_RELIABLE);
 	if (g_bIsProtoBuf) {
-		Protobuf pb = UserMessageToProtobuf(RadioText);
-		pb.SetInt("msg_dst", g_MsgDest);
-		pb.SetInt("client", g_MsgClient);
-		pb.SetString("msg_name", g_MsgName);
-		pb.SetString("params", g_MsgParam1, 0);
-		pb.SetString("params", g_MsgParam2, 1);
-		pb.SetString("params", g_MsgParam3, 2);
-		pb.SetString("params", g_MsgParam4, 3);
+		UserMessageToProtobuf(SendAudio).SetString("radio_sound", radioSound);
 	} else {
-		BfWrite bf = UserMessageToBfWrite(RadioText);
-		bf.WriteByte(g_MsgDest);
-		bf.WriteByte(g_MsgClient);
-		bf.WriteString(g_MsgName);
-		bf.WriteString(g_MsgParam1);
-		bf.WriteString(g_MsgParam2);
-		bf.WriteString(g_MsgParam3);
-		bf.WriteString(g_MsgParam4);
+		UserMessageToBfWrite(SendAudio).WriteString(radioSound);
 	}
-
-	EndMessage();
-
-	Handle SendAudio = StartMessage("SendAudio", g_MsgPlayers, playersNum, USERMSG_RELIABLE);
-	if (g_bIsProtoBuf) {
-		UserMessageToProtobuf(SendAudio).SetString("radio_sound", g_MsgRadioSound);
-	} else {
-		UserMessageToBfWrite(SendAudio).WriteString(g_MsgRadioSound);
-	}
+	
 	EndMessage();
 }
