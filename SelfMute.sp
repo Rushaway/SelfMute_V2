@@ -2203,8 +2203,14 @@ int GetClientBySteamID(const char[] steamID) {
 
 /* Thanks to Botox Original Self-Mute plugin for the radio commands part */
 int g_MsgClient = -1;
+bool g_bDisableHook = false; // this is for text... */
 
 public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
+	if (g_bDisableHook) {
+		g_MsgClient = -1;
+		return Plugin_Continue;
+	}
+	
 	int msg_dst;
 	char msg_name[256];
 	char msg_params[4][256];
@@ -2265,17 +2271,17 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 		pack.WriteCell(newPlayers[i]);
 	}
 
-	CreateTimer(0.3, OnPlayerRadioText, pack, TIMER_FLAG_NO_MAPCHANGE);
+	RequestFrame(OnPlayerRadioText, pack);
 	return Plugin_Stop;
 }
 
-Action OnPlayerRadioText(Handle timer, DataPack pack) {
+void OnPlayerRadioText(DataPack pack) {
 	pack.Reset();
 
 	int msg_client = pack.ReadCell();
 	if (!IsClientInGame(msg_client)) {
 		delete pack;
-		return Plugin_Stop;
+		return;
 	}
 
 	int msg_dst;
@@ -2301,7 +2307,8 @@ Action OnPlayerRadioText(Handle timer, DataPack pack) {
 	}
 
 	delete pack;
-
+	
+	g_bDisableHook = true;
 	Handle RadioText = StartMessage("RadioText", newPlayers, newPlayersNum2, USERMSG_RELIABLE);
 	if (g_bIsProtoBuf) {
 		Protobuf pb = UserMessageToProtobuf(RadioText);
@@ -2322,7 +2329,12 @@ Action OnPlayerRadioText(Handle timer, DataPack pack) {
 	}
 
 	EndMessage();
-	return Plugin_Stop;
+	
+	RequestFrame(EnableHook);
+}
+
+void EnableHook() {
+	g_bDisableHook = false;
 }
 
 public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
