@@ -2247,6 +2247,7 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 	}
 	
 	DataPack pack = new DataPack();
+	pack.WriteCell(g_MsgClient);
 	pack.WriteCell(msg_dst);
 	pack.WriteString(msg_name);
 	for (int i = 0; i < 4; i++) {
@@ -2264,7 +2265,10 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 }
 
 void OnPlayerRadioText(DataPack pack) {
-	if (!IsClientInGame(g_MsgClient)) {
+	pack.Reset();
+	
+	int msg_client = pack.ReadCell();
+	if (!IsClientInGame(msg_client)) {
 		delete pack;
 		return;
 	}
@@ -2299,7 +2303,7 @@ void OnPlayerRadioText(DataPack pack) {
 	if (g_bIsProtoBuf) {
 		Protobuf pb = UserMessageToProtobuf(RadioText);
 		pb.SetInt("msg_dst", msg_dst);
-		pb.SetInt("client", g_MsgClient);
+		pb.SetInt("client", msg_client);
 		pb.SetString("msg_name", msg_name);
 		for (int i = 0; i < 4; i++) {
 			pb.SetString("params", msg_params[i], i);
@@ -2307,7 +2311,7 @@ void OnPlayerRadioText(DataPack pack) {
 	} else {
 		BfWrite bf = UserMessageToBfWrite(RadioText);
 		bf.WriteByte(msg_dst);
-		bf.WriteByte(g_MsgClient);
+		bf.WriteByte(msg_client);
 		bf.WriteString(msg_name);
 		for (int i = 0; i < 4; i++) {
 			bf.WriteString(msg_params[i]);
