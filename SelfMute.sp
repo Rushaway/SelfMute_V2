@@ -133,26 +133,8 @@ enum struct PlayerData {
 	}
 }
 
-enum struct SelfMute {
-	char name[32]; // targetName for mute and groupName for groups mute
-	char id[20]; // targetSteaID for clients mute and groupFilter for groups mute
-	MuteType muteType;
-	MuteTarget muteTarget;
-
-	void AddMute(char[] nameEx = "", char[] idEx, MuteType muteTypeEx, MuteTarget muteTargetEx) {
-		if (muteTargetEx == MuteTarget_Client) {
-			strcopy(this.name, sizeof(SelfMute::name), nameEx);
-		}
-
-		strcopy(this.id, sizeof(SelfMute::id), idEx);
-		this.muteType = muteTypeEx;
-		this.muteTarget = muteTargetEx;
-	}
-}
-
 /* Player Data */
 PlayerData g_PlayerData[MAXPLAYERS + 1];
-
 
 /* Database */
 Database g_hDB;
@@ -2247,11 +2229,12 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 	
 	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
-		if (!(GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No))
-		{
-			newPlayers[newPlayersNum] = client;
-			newPlayersNum++;
+		if (GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No) {
+			continue;
 		}
+	
+		newPlayers[newPlayersNum] = client;
+		newPlayersNum++;
 	}
 	
 	// No clients were excluded.
@@ -2260,7 +2243,7 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 		return Plugin_Continue;
 	} else if (newPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
 		g_MsgClient = -2;
-		return Plugin_Handled;
+		return Plugin_Stop;
 	}
 	
 	DataPack pack = new DataPack();
@@ -2340,7 +2323,7 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 	if (g_MsgClient == -1) {
 		return Plugin_Continue;
 	} else if (g_MsgClient == -2) {
-		return Plugin_Handled;
+		return Plugin_Stop;
 	}
 
 	char radioSound[256];
@@ -2360,17 +2343,18 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 	
 	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
-		if (!(GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No))
-		{
-			newPlayers[newPlayersNum] = client;
-			newPlayersNum++;
+		if (GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No) {
+			continue;
 		}
+		
+		newPlayers[newPlayersNum] = client;
+		newPlayersNum++;
 	}
 	
 	if (newPlayersNum == playersNum) {
 		return Plugin_Continue;
 	} else if (newPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
-		return Plugin_Handled;
+		return Plugin_Stop;
 	}
 	
 	DataPack pack = new DataPack();
@@ -2386,7 +2370,7 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 	
 	RequestFrame(OnPlayerRadio, pack);
 
-	return Plugin_Handled;
+	return Plugin_Stop;
 }
 
 void OnPlayerRadio(DataPack pack) {
