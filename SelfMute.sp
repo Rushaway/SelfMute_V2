@@ -117,11 +117,10 @@ enum struct PlayerData {
 	bool addedToDB;
 
 	void Reset() {
-		this.name[0] = '\0';
-		this.steamID[0] = '\0';
-		this.muteType = view_as<MuteType>(g_cvDefaultMuteTypeSettings.IntValue);
-		this.muteDuration = view_as<MuteDuration>(g_cvDefaultMuteDurationSettings.IntValue);
-		this.addedToDB = false;
+		this.Setup(
+			"", "", view_as<MuteType>(g_cvDefaultMuteTypeSettings.IntValue),
+					view_as<MuteDuration>(g_cvDefaultMuteDurationSettings.IntValue)
+		);
 	}
 
 	void Setup(char[] nameEx, char[] steamIDEx, MuteType muteTypeEx, MuteDuration muteDurationEx) {
@@ -2266,17 +2265,17 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 		pack.WriteCell(newPlayers[i]);
 	}
 
-	RequestFrame(OnPlayerRadioText, pack);
-	return Plugin_Handled;
+	CreateTimer(0.3, OnPlayerRadioText, pack, TIMER_FLAG_NO_MAPCHANGE);
+	return Plugin_Stop;
 }
 
-void OnPlayerRadioText(DataPack pack) {
+Action OnPlayerRadioText(Handle timer, DataPack pack) {
 	pack.Reset();
 
 	int msg_client = pack.ReadCell();
 	if (!IsClientInGame(msg_client)) {
 		delete pack;
-		return;
+		return Plugin_Stop;
 	}
 
 	int msg_dst;
@@ -2323,6 +2322,7 @@ void OnPlayerRadioText(DataPack pack) {
 	}
 
 	EndMessage();
+	return Plugin_Stop;
 }
 
 public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
