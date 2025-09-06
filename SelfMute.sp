@@ -2277,8 +2277,6 @@ void OnPlayerRadioText(DataPack pack) {
 	char msg_name[256];
 	char msg_params[4][256];
 
-	pack.Reset();
-	
 	msg_dst = pack.ReadCell();
 	pack.ReadString(msg_name, sizeof(msg_name));
 	for (int i = 0; i < 4; i++) {
