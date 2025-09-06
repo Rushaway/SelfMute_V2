@@ -462,15 +462,15 @@ Action Command_PermaSelfMute(int client, int args) {
 		CReplyToCommand(client, "Usage: !psm <playername | @group>");
 		return Plugin_Handled;
 	}
-	
+
 	char arg1[32];
 	GetCmdArg(1, arg1, sizeof(arg1));
-	
+
 	if (arg1[0] == '@') {
 		HandleGroupSelfMute(client, arg1, MuteType_All, MuteDuration_Permanent);
 		return Plugin_Handled;
 	}
-	
+
 	int target = FindTarget(client, arg1, false, false);
 	if (target == -1) {
 		return Plugin_Handled;
@@ -499,21 +499,21 @@ Action Command_PermaSelfUnMute(int client, int args) {
 		CReplyToCommand(client, "You need to be authorized to use this command. Please rejoin.");
 		return Plugin_Handled;
 	}
-	
+
 	if (!GetCmdArgs()) {
 		OpenSelfMuteMenu(client);
 		CReplyToCommand(client, "Usage: !psu <playername|@group>");
 		return Plugin_Handled;
 	}
-	
+
 	char arg1[32];
 	GetCmdArg(1, arg1, sizeof(arg1));
-	
+
 	if (arg1[0] == '@') {
 		HandleGroupSelfUnMute(client, arg1);
 		return Plugin_Handled;
 	}
-	
+
 	int target = FindTarget(client, arg1, false, false);
 	if (target == -1) {
 		return Plugin_Handled;
@@ -706,7 +706,7 @@ Action Command_SelfMute(int client, int args) {
 		ShowSelfMuteTargetsMenu(client);
 		return Plugin_Handled;
 	}
-	
+
 	char arg1[32];
 	GetCmdArg(1, arg1, sizeof(arg1));
 
@@ -1525,11 +1525,16 @@ void DB_OnGetClientData(Database db, DBResultSet results, const char[] error, in
 
 	int steamID = StringToInt(g_PlayerData[client].steamID);
 
-	if (results != null && results.FetchRow()) {
+	if (results == null) {
+		return;
+	}
+
+	if (results.FetchRow()) {
 		g_PlayerData[client].addedToDB = true;
 
 		g_PlayerData[client].muteType = view_as<MuteType>(results.FetchInt(0));
 		g_PlayerData[client].muteDuration = view_as<MuteDuration>(results.FetchInt(1));
+
 	}
 
 	/*
@@ -1569,6 +1574,7 @@ void DB_OnGetClientTargets(Database db, DBResultSet results, const char[] error,
 	if (!results.RowCount) {
 		return;
 	}
+
 
 	int desiredClient = GetClientOfUserId(userid);
 	if (!desiredClient || !IsClientInGame(desiredClient)) {
@@ -1943,7 +1949,7 @@ void DB_UpdateClientData(int client, int mode) {
 	}
 
 	if (!g_PlayerData[client].addedToDB) {
-		char query[120];
+		char query[512];
 		if (!g_bSQLLite) {
 			FormatEx(query, sizeof(query), "INSERT INTO `clients_data` ("
 											... "`client_steamid`, `mute_type`, `mute_duration`)"
@@ -2222,21 +2228,21 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 			bf.ReadString(msg_params[i], sizeof(msg_params[]), false);
 		}
 	}
-	
+
 	// Check which clients need to be excluded.
 	int newPlayersNum = 0;
 	int newPlayers[MAXPLAYERS + 1];
-	
+
 	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
 		if (GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No) {
 			continue;
 		}
-	
+
 		newPlayers[newPlayersNum] = client;
 		newPlayersNum++;
 	}
-	
+
 	// No clients were excluded.
 	if (newPlayersNum == playersNum) {
 		g_MsgClient = -1;
@@ -2245,7 +2251,7 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 		g_MsgClient = -2;
 		return Plugin_Stop;
 	}
-	
+
 	DataPack pack = new DataPack();
 	pack.WriteCell(g_MsgClient);
 	pack.WriteCell(msg_dst);
@@ -2253,26 +2259,26 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 	for (int i = 0; i < 4; i++) {
 		pack.WriteString(msg_params[i]);
 	}
-	
+
 	pack.WriteCell(newPlayersNum);
-	
+
 	for (int i = 0; i < newPlayersNum; i++) {
 		pack.WriteCell(newPlayers[i]);
 	}
-	
+
 	RequestFrame(OnPlayerRadioText, pack);
 	return Plugin_Handled;
 }
 
 void OnPlayerRadioText(DataPack pack) {
 	pack.Reset();
-	
+
 	int msg_client = pack.ReadCell();
 	if (!IsClientInGame(msg_client)) {
 		delete pack;
 		return;
 	}
-	
+
 	int msg_dst;
 	char msg_name[256];
 	char msg_params[4][256];
@@ -2282,10 +2288,10 @@ void OnPlayerRadioText(DataPack pack) {
 	for (int i = 0; i < 4; i++) {
 		pack.ReadString(msg_params[i], sizeof(msg_params[]));
 	}
-	
+
 	int newPlayersNum = pack.ReadCell();
 	int[] newPlayers = new int[newPlayersNum];
-	
+
 	int newPlayersNum2 = 0;
 	for (int i = 0; i < newPlayersNum; i++) {
 		int client = pack.ReadCell();
@@ -2294,9 +2300,9 @@ void OnPlayerRadioText(DataPack pack) {
 			newPlayersNum2++;
 		}
 	}
-	
+
 	delete pack;
-	
+
 	Handle RadioText = StartMessage("RadioText", newPlayers, newPlayersNum2, USERMSG_RELIABLE);
 	if (g_bIsProtoBuf) {
 		Protobuf pb = UserMessageToProtobuf(RadioText);
@@ -2337,21 +2343,21 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 		g_MsgClient = -1;
 		return Plugin_Continue;
 	}
-	
+
 	// Check which clients need to be excluded.
 	int newPlayersNum = 0;
 	int newPlayers[MAXPLAYERS + 1];
-	
+
 	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
 		if (GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No) {
 			continue;
 		}
-		
+
 		newPlayers[newPlayersNum] = client;
 		newPlayersNum++;
 	}
-	
+
 	if (newPlayersNum == playersNum) {
 		g_MsgClient = -1;
 		return Plugin_Continue;
@@ -2359,18 +2365,18 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 		g_MsgClient = -1;
 		return Plugin_Stop;
 	}
-	
+
 	DataPack pack = new DataPack();
-	
+
 	pack.WriteCell(g_MsgClient);
 	pack.WriteString(radioSound);
 	pack.WriteCell(newPlayersNum);
 	for (int i = 0; i < newPlayersNum; i++) {
 		pack.WriteCell(newPlayers[i]);
 	}
-	
+
 	g_MsgClient = -1;
-	
+
 	RequestFrame(OnPlayerRadio, pack);
 
 	return Plugin_Stop;
@@ -2378,19 +2384,19 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 
 void OnPlayerRadio(DataPack pack) {
 	pack.Reset();
-	
+
 	int msg_client = pack.ReadCell();
 	if (!IsClientInGame(msg_client)) {
 		delete pack;
 		return;
 	}
-	
+
 	char radioSound[256];
 	pack.ReadString(radioSound, sizeof(radioSound));
-	
+
 	int newPlayersNum = pack.ReadCell();
 	int[] newPlayers = new int[newPlayersNum];
-	
+
 	int newPlayersNum2 = 0;
 	for (int i = 0; i < newPlayersNum; i++) {
 		int client = pack.ReadCell();
@@ -2399,15 +2405,15 @@ void OnPlayerRadio(DataPack pack) {
 			newPlayersNum2++;
 		}
 	}
-	
+
 	delete pack;
-	
+
 	Handle SendAudio = StartMessage("SendAudio", newPlayers, newPlayersNum2, USERMSG_RELIABLE);
 	if (g_bIsProtoBuf) {
 		UserMessageToProtobuf(SendAudio).SetString("radio_sound", radioSound);
 	} else {
 		UserMessageToBfWrite(SendAudio).WriteString(radioSound);
 	}
-	
+
 	EndMessage();
 }
