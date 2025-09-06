@@ -2317,8 +2317,6 @@ void OnPlayerRadioText(DataPack pack) {
 	}
 
 	EndMessage();
-	
-	g_MsgClient = -1;
 }
 
 public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
@@ -2336,6 +2334,7 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 	}
 
 	if (strcmp(radioSound, "radio.locknload") == 0) {
+		g_MsgClient = -1;
 		return Plugin_Continue;
 	}
 	
@@ -2354,8 +2353,10 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 	}
 	
 	if (newPlayersNum == playersNum) {
+		g_MsgClient = -1;
 		return Plugin_Continue;
 	} else if (newPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
+		g_MsgClient = -1;
 		return Plugin_Stop;
 	}
 	
