@@ -224,6 +224,16 @@ public void OnPluginStart() {
 	HookUserMessage(msgRadioText, Hook_UserMessageRadioText, true);
 	HookUserMessage(msgSendAudio, Hook_UserMessageSendAudio, true);
 
+	/* Hook Radio Commands */
+	static const char radioMessages[][] = {
+		"coverme","takepoint","holdpos","followme","regroup","takingfire","go","fallback","sticktog","stormfront",
+		"roger","enemyspot","needbackup","sectorclear","inposition","negative","report","getout","enemydown","reportingin"
+	};
+	
+	for (int i = 0; i < sizeof(radioMessages); i++) {
+		AddCommandListener(OnRadioCommand, radioMessages[i]);
+	}
+	
 	/* Incase of a late load */
 	if (g_bLate) {
 		LateLoadClients();
@@ -1368,8 +1378,7 @@ void DB_Tables() {
 												... "`target_steamid` INT UNSIGNED NOT NULL,"
 												... "`text_chat` TINYINT NOT NULL,"
 												... "`voice_chat` TINYINT NOT NULL,"
-												... "PRIMARY KEY (`client_steamid`, `target_steamid`),"
-												... "INDEX `idx_target_steamid` (`target_steamid`))");
+												... "PRIMARY KEY (`client_steamid`, `target_steamid`))");
 
 		T_mysqlTables.AddQuery(query0);
 
@@ -1382,22 +1391,22 @@ void DB_Tables() {
 
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_client_steamid` ON `clients_data` (`client_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_client_steamid` ON `clients_data` (`client_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_clients_client_steamid` ON `clients_mute` (`client_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_clients_client_steamid` ON `clients_mute` (`client_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_clients_target_steamid` ON `clients_mute` (`target_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_clients_target_steamid` ON `clients_mute` (`target_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_groups_client_steamid` ON `groups_mute` (`client_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_groups_client_steamid` ON `groups_mute` (`client_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_both1` ON `clients_mute` (`client_steamid`, `target_steamid`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_both1` ON `clients_mute` (`client_steamid`, `target_steamid`)");
 		T_mysqlTables.AddQuery(query0);
 
-		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX IF NOT EXISTS `idx_both2` ON `groups_mute` (`client_steamid`, `group_filter`)");
+		g_hDB.Format(query0, sizeof(query0), "CREATE INDEX `idx_both2` ON `groups_mute` (`client_steamid`, `group_filter`)");
 
 		T_mysqlTables.AddQuery(query0);
 
@@ -2203,44 +2212,63 @@ int GetClientBySteamID(const char[] steamID) {
 
 /* Thanks to Botox Original Self-Mute plugin for the radio commands part */
 int g_MsgClient = -1;
-bool g_bDisableHook = false; // this is for text... */
+float g_fLastMessageTime;
 
-public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
-	if (g_bDisableHook) {
-		g_MsgClient = -1;
-		return Plugin_Continue;
+Action OnRadioCommand(int client, const char[] command, int argc) {
+	float currentTime = GetGameTime();
+	
+	if (g_fLastMessageTime > 0.0 && g_fLastMessageTime+0.2 > currentTime) {
+		return Plugin_Handled;
 	}
 	
+	g_MsgClient = client;
+	g_fLastMessageTime = GetGameTime();
+	
+	return Plugin_Continue;
+}
+
+public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
 	int msg_dst;
+	int msg_client;
 	char msg_name[256];
 	char msg_params[4][256];
 
 	if (g_bIsProtoBuf) {
 		Protobuf pb = UserMessageToProtobuf(userMessage);
 		msg_dst = pb.ReadInt("msg_dst");
-		g_MsgClient = pb.ReadInt("client");
+		msg_client = pb.ReadInt("client");
 		pb.ReadString("msg_name", msg_name, sizeof(msg_name));
 		for (int i = 0; i < 4; i++) {
 			pb.ReadString("params", msg_params[i], sizeof(msg_params[]), i);
 		}
-	}
-	else {
+	} else {
 		BfRead bf = UserMessageToBfRead(userMessage);
 		msg_dst = bf.ReadByte();
-		g_MsgClient = bf.ReadByte();
+		msg_client = bf.ReadByte();
 		bf.ReadString(msg_name, sizeof(msg_name), false);
 		for (int i = 0; i < 4; i++) {
 			bf.ReadString(msg_params[i], sizeof(msg_params[]), false);
 		}
 	}
-
+	
+	/*
+	char msg[300];
+	FormatEx(msg, sizeof(msg), "[SelfMute] msg_name: %s", msg_name);
+	PrintToServer(msg);
+	
+	for (int i = 0; i < 4; i++) {
+		FormatEx(msg, sizeof(msg), "[SelfMute] param: %s", msg_params[i]);
+		PrintToServer(msg);
+	}
+	*/
+	
 	// Check which clients need to be excluded.
 	int newPlayersNum = 0;
 	int newPlayers[MAXPLAYERS + 1];
 
 	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
-		if (GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No) {
+		if (GetIgnored(client, msg_client) || GetListenOverride(client, msg_client) == Listen_No) {
 			continue;
 		}
 
@@ -2258,7 +2286,7 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 	}
 
 	DataPack pack = new DataPack();
-	pack.WriteCell(g_MsgClient);
+	pack.WriteCell(msg_client);
 	pack.WriteCell(msg_dst);
 	pack.WriteString(msg_name);
 	for (int i = 0; i < 4; i++) {
@@ -2281,6 +2309,7 @@ void OnPlayerRadioText(DataPack pack) {
 	int msg_client = pack.ReadCell();
 	if (!IsClientInGame(msg_client)) {
 		delete pack;
+		g_MsgClient = -1;
 		return;
 	}
 
@@ -2308,7 +2337,6 @@ void OnPlayerRadioText(DataPack pack) {
 
 	delete pack;
 	
-	g_bDisableHook = true;
 	Handle RadioText = StartMessage("RadioText", newPlayers, newPlayersNum2, USERMSG_RELIABLE);
 	if (g_bIsProtoBuf) {
 		Protobuf pb = UserMessageToProtobuf(RadioText);
@@ -2329,33 +2357,30 @@ void OnPlayerRadioText(DataPack pack) {
 	}
 
 	EndMessage();
-	
-	RequestFrame(EnableHook);
-}
-
-void EnableHook() {
-	g_bDisableHook = false;
 }
 
 public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, const int[] players, int playersNum, bool reliable, bool init) {
-	if (g_MsgClient == -1) {
-		return Plugin_Continue;
-	} else if (g_MsgClient == -2) {
-		return Plugin_Stop;
-	}
-
 	char radioSound[256];
 	if (g_bIsProtoBuf) {
 		UserMessageToProtobuf(userMessage).ReadString("radio_sound", radioSound, sizeof(radioSound));
 	} else {
 		UserMessageToBfRead(userMessage).ReadString(radioSound, sizeof(radioSound), false);
 	}
-
+	
+	if (StrContains(radioSound, "radio.") == -1) {
+		g_MsgClient = -1;
+		return Plugin_Continue;
+	}
+	
 	if (strcmp(radioSound, "radio.locknload") == 0) {
 		g_MsgClient = -1;
 		return Plugin_Continue;
 	}
-
+	
+	if (g_MsgClient < 0 && StrContains(radioSound, "FireInTheHole", false) == -1) {
+		return Plugin_Continue;
+	}
+	
 	// Check which clients need to be excluded.
 	int newPlayersNum = 0;
 	int newPlayers[MAXPLAYERS + 1];
@@ -2386,8 +2411,6 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 	for (int i = 0; i < newPlayersNum; i++) {
 		pack.WriteCell(newPlayers[i]);
 	}
-
-	g_MsgClient = -1;
 
 	RequestFrame(OnPlayerRadio, pack);
 
@@ -2428,4 +2451,6 @@ void OnPlayerRadio(DataPack pack) {
 	}
 
 	EndMessage();
+	
+	g_MsgClient = -1;
 }
