@@ -56,6 +56,9 @@ bool g_bSQLLite = false;
 ConVar g_cvDefaultMuteTypeSettings;
 ConVar g_cvDefaultMuteDurationSettings;
 
+/* Radio Last Message Float */
+float g_fLastMessageTime;
+
 /* Enums & Structs */
 enum MuteType {
 	MuteType_Voice = 0,
@@ -202,7 +205,8 @@ public void OnPluginStart() {
 
 	/* Events */
 	HookEvent("player_team", Event_PlayerTeam);
-
+	HookEvent("round_start", Event_RoundStart);
+	
 	/* Connect To DB */
 	ConnectToDB();
 
@@ -1323,6 +1327,10 @@ void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast) {
 	}
 }
 
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast) {
+	g_fLastMessageTime = 0.0;
+}
+
 /* Database Setup */
 void ConnectToDB() {
 	Database.Connect(DB_OnConnect, DB_NAME);
@@ -2212,11 +2220,10 @@ int GetClientBySteamID(const char[] steamID) {
 
 /* Thanks to Botox Original Self-Mute plugin for the radio commands part */
 int g_MsgClient = -1;
-float g_fLastMessageTime;
 
 Action OnRadioCommand(int client, const char[] command, int argc) {
 	float currentTime = GetGameTime();
-	
+
 	if (g_fLastMessageTime > 0.0 && g_fLastMessageTime+0.2 > currentTime) {
 		return Plugin_Handled;
 	}
