@@ -2285,10 +2285,8 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 
 	// No clients were excluded.
 	if (newPlayersNum == playersNum) {
-		g_MsgClient = -1;
 		return Plugin_Continue;
 	} else if (newPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
-		g_MsgClient = -2;
 		return Plugin_Stop;
 	}
 
@@ -2379,7 +2377,7 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 		return Plugin_Continue;
 	}
 	
-	if (g_MsgClient < 0 && StrContains(radioSound, "FireInTheHole", false) == -1) {
+	if (g_MsgClient < 0 && StrContains(radioSound, "FireInTheHole", false) != -1) {
 		return Plugin_Continue;
 	}
 	
@@ -2453,6 +2451,4 @@ void OnPlayerRadio(DataPack pack) {
 	}
 
 	EndMessage();
-	
-	g_MsgClient = -1;
 }
