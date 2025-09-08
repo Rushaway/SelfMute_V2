@@ -2374,11 +2374,6 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 		UserMessageToBfRead(userMessage).ReadString(radioSound, sizeof(radioSound), false);
 	}
 	
-	if (StrContains(radioSound, "radio.") == -1) {
-		g_MsgClient = -1;
-		return Plugin_Continue;
-	}
-	
 	if (strcmp(radioSound, "radio.locknload") == 0) {
 		g_MsgClient = -1;
 		return Plugin_Continue;
