@@ -231,7 +231,7 @@ public void OnPluginStart() {
 	/* Hook Radio Commands */
 	static const char radioMessages[][] = {
 		"coverme","takepoint","holdpos","followme","regroup","takingfire","go","fallback","sticktog","stormfront",
-		"roger","enemyspot","needbackup","sectorclear","inposition","negative","report","getout","enemydown","reportingin"
+		"roger","enemyspot","needbackup","sectorclear","inposition","negative","report","getout","enemydown","reportingin","getinpos"
 	};
 	
 	for (int i = 0; i < sizeof(radioMessages); i++) {
@@ -2258,17 +2258,6 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 		}
 	}
 	
-	/*
-	char msg[300];
-	FormatEx(msg, sizeof(msg), "[SelfMute] msg_name: %s", msg_name);
-	PrintToServer(msg);
-	
-	for (int i = 0; i < 4; i++) {
-		FormatEx(msg, sizeof(msg), "[SelfMute] param: %s", msg_params[i]);
-		PrintToServer(msg);
-	}
-	*/
-	
 	// Check which clients need to be excluded.
 	int newPlayersNum = 0;
 	int newPlayers[MAXPLAYERS + 1];
@@ -2314,7 +2303,6 @@ void OnPlayerRadioText(DataPack pack) {
 	int msg_client = pack.ReadCell();
 	if (!IsClientInGame(msg_client)) {
 		delete pack;
-		g_MsgClient = -1;
 		return;
 	}
 
@@ -2373,7 +2361,6 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 	}
 	
 	if (strcmp(radioSound, "radio.locknload") == 0) {
-		g_MsgClient = -1;
 		return Plugin_Continue;
 	}
 	
@@ -2400,16 +2387,13 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 	}
 
 	if (newPlayersNum == playersNum) {
-		g_MsgClient = -1;
 		return Plugin_Continue;
 	} else if (newPlayersNum == 0) { // All clients were excluded and there is no need to broadcast.
-		g_MsgClient = -1;
 		return Plugin_Stop;
 	}
 
 	DataPack pack = new DataPack();
 
-	pack.WriteCell(g_MsgClient);
 	pack.WriteString(radioSound);
 	pack.WriteCell(newPlayersNum);
 	for (int i = 0; i < newPlayersNum; i++) {
@@ -2424,8 +2408,7 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 void OnPlayerRadio(DataPack pack) {
 	pack.Reset();
 
-	int msg_client = pack.ReadCell();
-	if (!IsClientInGame(msg_client)) {
+	if (!IsClientInGame(g_MsgClient)) {
 		delete pack;
 		return;
 	}
