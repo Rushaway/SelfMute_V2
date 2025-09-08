@@ -206,7 +206,7 @@ public void OnPluginStart() {
 	/* Events */
 	HookEvent("player_team", Event_PlayerTeam);
 	HookEvent("round_start", Event_RoundStart);
-	
+
 	/* Connect To DB */
 	ConnectToDB();
 
@@ -233,11 +233,11 @@ public void OnPluginStart() {
 		"coverme","takepoint","holdpos","followme","regroup","takingfire","go","fallback","sticktog","stormfront",
 		"roger","enemyspot","needbackup","sectorclear","inposition","negative","report","getout","enemydown","reportingin","getinpos"
 	};
-	
+
 	for (int i = 0; i < sizeof(radioMessages); i++) {
 		AddCommandListener(OnRadioCommand, radioMessages[i]);
 	}
-	
+
 	/* Incase of a late load */
 	if (g_bLate) {
 		LateLoadClients();
@@ -2227,10 +2227,10 @@ Action OnRadioCommand(int client, const char[] command, int argc) {
 	if (g_fLastMessageTime > 0.0 && g_fLastMessageTime+0.2 > currentTime) {
 		return Plugin_Handled;
 	}
-	
+
 	g_MsgClient = client;
 	g_fLastMessageTime = GetGameTime();
-	
+
 	return Plugin_Continue;
 }
 
@@ -2257,7 +2257,7 @@ public Action Hook_UserMessageRadioText(UserMsg msg_id, Handle userMessage, cons
 			bf.ReadString(msg_params[i], sizeof(msg_params[]), false);
 		}
 	}
-	
+
 	// Check which clients need to be excluded.
 	int newPlayersNum = 0;
 	int newPlayers[MAXPLAYERS + 1];
@@ -2329,7 +2329,7 @@ void OnPlayerRadioText(DataPack pack) {
 	}
 
 	delete pack;
-	
+
 	Handle RadioText = StartMessage("RadioText", newPlayers, newPlayersNum2, USERMSG_RELIABLE);
 	if (g_bIsProtoBuf) {
 		Protobuf pb = UserMessageToProtobuf(RadioText);
@@ -2359,19 +2359,19 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 	} else {
 		UserMessageToBfRead(userMessage).ReadString(radioSound, sizeof(radioSound), false);
 	}
-	
+
 	if (strcmp(radioSound, "radio.locknload") == 0) {
 		return Plugin_Continue;
 	}
-	
+
 	if (g_MsgClient < 0 && StrContains(radioSound, "FireInTheHole", false) != -1) {
 		return Plugin_Continue;
 	}
-	
+
 	if (g_MsgClient <= 0) {
 		return Plugin_Continue;
 	}
-	
+
 	// Check which clients need to be excluded.
 	int newPlayersNum = 0;
 	int newPlayers[MAXPLAYERS + 1];
