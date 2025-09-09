@@ -2378,6 +2378,10 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 
 	for (int i = 0; i < playersNum; i++) {
 		int client = players[i];
+		if (!IsClientInGame(client)) {
+			continue;
+		}
+
 		if (GetIgnored(client, g_MsgClient) || GetListenOverride(client, g_MsgClient) == Listen_No) {
 			continue;
 		}
