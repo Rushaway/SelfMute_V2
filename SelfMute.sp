@@ -2372,6 +2372,10 @@ public Action Hook_UserMessageSendAudio(UserMsg msg_id, Handle userMessage, cons
 		return Plugin_Continue;
 	}
 
+	if (!IsClientInGame(g_MsgClient)) {
+		return Plugin_Continue;
+	}
+
 	// Check which clients need to be excluded.
 	int newPlayersNum = 0;
 	int newPlayers[MAXPLAYERS + 1];
